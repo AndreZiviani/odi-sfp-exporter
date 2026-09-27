@@ -13,6 +13,36 @@ permissions:
   contents: read
 
 jobs:
+  changelog:
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no-changelog')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A PR that touches anything besides docs (docs/, README.md) or CI
+      # (.github/) must also update CHANGELOG.md in the same diff. Docs-only
+      # or CI-only PRs, and PRs labeled no-changelog, are exempt.
+      - name: Require a CHANGELOG entry
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "$changed"
+
+          non_docs_ci=$(printf '%s\n' "$changed" | grep -Ev '^(docs/|\.github/|README\.md$|CHANGELOG\.md$)' || true)
+
+          if [ -z "$non_docs_ci" ]; then
+            echo "docs-only or CI-only change, no CHANGELOG entry required"
+            exit 0
+          fi
+
+          if ! printf '%s\n' "$changed" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::this PR changes files outside docs/CI but does not update CHANGELOG.md -- add an entry under ## Unreleased, or apply the no-changelog label"
+            exit 1
+          fi
+
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -82,8 +112,40 @@ jobs:
             stick/exporter-up.sh
           if-no-files-found: error
 
-      - name: Publish release
+      # Pulls this tag section out of CHANGELOG.md (## <tag> up to the next
+      # ## heading) to use as the release body. Falls back to the static
+      # body + generate_release_notes below when the tag has no section
+      # (e.g. a fixed-up retag) rather than failing the release.
+      - name: Extract release notes from CHANGELOG
         if: startsWith(github.ref, 'refs/tags/v')
+        id: changelog
+        run: |
+          tag="${{ github.ref_name }}"
+          awk -v heading="## $tag" '
+            $0 == heading {found=1; next}
+            found && /^## / {exit}
+            found {print}
+          ' CHANGELOG.md > /tmp/release-notes.md
+          if [ -s /tmp/release-notes.md ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish release (from CHANGELOG)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.changelog.outputs.found == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: false
+          generate_release_notes: false
+          body_path: /tmp/release-notes.md
+          files: |
+            build/metricsd
+            build/SHA256SUMS
+            stick/exporter-up.sh
+
+      - name: Publish release (fallback)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.changelog.outputs.found != 'true'
         uses: softprops/action-gh-release@v3
         with:
           draft: false

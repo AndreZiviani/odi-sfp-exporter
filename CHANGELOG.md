@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- CI: a `v*` tag release now uses the matching `## <tag>` section of this
+  file as its release body, falling back to the previous auto-generated
+  notes when a tag has no section.
+- CI: a pull request that changes anything besides docs (`docs/`,
+  `README.md`) or CI (`.github/`) must also update this file, unless labeled
+  `no-changelog`.
+- AGENTS.md: documented the rule above.
+
 ## v1.1.1
 
 (v1.1.0 was tagged and pushed but its CI run failed on `make test` writing

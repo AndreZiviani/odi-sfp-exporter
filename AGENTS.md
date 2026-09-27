@@ -60,6 +60,12 @@ no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,
 not only on tags.
 
+## Changelog discipline
+
+Every change that affects users, the build, or the docs adds an entry under
+`## Unreleased` in `CHANGELOG.md`, in the same commit as the change itself. A
+release moves `## Unreleased` into a version section named after the tag.
+
 ## Release process
 
 Every push and PR builds and gates the binary (`make httpd`, `make verify`,

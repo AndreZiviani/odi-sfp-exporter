@@ -17,11 +17,12 @@ From `/bin/diag`, **all in a single fork per scrape**:
 | `gpon_voltage_volts` | `diag pon get transceiver voltage` |
 | `gpon_onu_state` | `diag gpon get onu-state` — the N in O(N); 5 is operational |
 | `gpon_alarm{alarm="..."}` | `diag gpon get alarm-status` — `los`, `lof`, `lom`, `sf`, `sd`, `tx_too_long`, `tx_mismatch`; 1 means asserted |
-| `gpon_port_{receive,transmit}_octets_total{port="..."}` | `diag mib dump counter port all` |
+| `gpon_port_{receive,transmit}_octets_total{port="..."}` | `diag mib dump counter port all` — **the throughput metric**, see below |
 | `gpon_port_{receive,transmit}_packets_total{port,kind="unicast\|multicast\|broadcast"}` | same |
 | `gpon_port_{receive,transmit}_drops_total{port}` | same |
-| `gpon_port_receive_errors_total{port,kind="crc_align\|fragment\|jabber\|undersize\|oversize"}` | same |
+| `gpon_port_receive_errors_total{port,kind="crc_align\|fragment\|jabber\|undersize"}` | same |
 | `gpon_port_pause_frames_total{port,direction="receive\|transmit"}` | same |
+| `gpon_port_frames_total{port,direction="rx\|tx",size="64\|65_127\|128_255\|256_511\|512_1023\|1024_1518\|1519_max"}` | same — frame-size histogram |
 
 **`port="2"` is the PON side and `port="0"` the host SerDes side.** These are
 the only counters that show whether the stick is actually *forwarding*, so they
@@ -36,9 +37,39 @@ These are the same counters the vendor web UI shows (boa's `ponGetStatus`,
 which prints them with `%llu`). Reading is **non-destructive** —
 `diag mib get count-mode` reports `normal free run`, resetting is a separate
 explicit `diag mib reset counter ...` — so a scrape takes nothing away from the
-web UI or from a manual `diag`, and they are wider than 32 bits (an observed
-`ifInOctets` of 5057428519 is past 2^32). Both properties are why these can be
-exported as real `counter`s, verbatim, with no accumulation in the exporter.
+web UI or from a manual `diag`. Both properties are why these can be exported
+as real `counter`s.
+
+### Throughput and the octet counters' width
+
+`gpon_port_receive_octets_total` / `gpon_port_transmit_octets_total` are **the
+throughput metric** — `port="2"` is the fibre/PON side, `port="0"` the host
+side. Mbit/s over a 5-minute window:
+
+```promql
+rate(gpon_port_receive_octets_total{port="2"}[5m]) * 8 / 1e6
+```
+
+`ifInOctets`/`ifOutOctets` are two consecutive 32-bit registers in odi-oss's
+own kernel driver (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), so a correctly
+matched image reports a real 64-bit reading — one read of `ifInOctets` came
+back 5057428519, past 2^32. But a scrape cannot assume the stick it talks to
+is running that driver: rc35 prefers an `/etc/config/metricsd` override over
+the image's own `/bin/metricsd`, and nothing ties that override to a matching
+kernel, so an exporter can end up paired with an older driver that reports
+these as plain 32-bit registers, wrapping at 4.29 GB — which is what a live
+read on stick `vero` showed. So the exporter no longer trusts the field width:
+it tracks the last raw reading per port and extends it into a monotonic
+64-bit total itself (`src/wrap.h`; see docs/DESIGN.md). On a stick with the
+fixed driver this is a no-op, since the reading then never goes backwards.
+
+What this does **not** cover: two wraps between two scrapes, i.e. more than
+4.29 GB of traffic inside one scrape interval — at the default 60 s interval,
+about 572 Mbit/s sustained for the whole interval. A shorter `scrape_interval`
+narrows this window directly. Every other MIB counter here (packets, drops,
+errors, pause frames, the frame-size histogram) is a single 32-bit register
+with no equivalent extension, because wrapping one of those needs a sustained
+rate many orders of magnitude higher than this hardware forwards.
 
 **Port 0's counters are reset every 15 minutes; port 2's are not.** Nothing in
 this exporter does it — `omci_app` does, at each OMCI performance-monitoring
@@ -63,9 +94,8 @@ non-destructive either way; the resets come from PM collection, not from
 scraping.
 
 The device prints 46 counters per port. Only those with an unambiguous unit are
-exported; the rest are packet-size histograms and half-duplex collision
-counters that mean nothing on a SerDes or a PON. Run the command by hand to see
-them all.
+exported; most of the rest are half-duplex collision counters that mean
+nothing on a SerDes or a PON. Run the command by hand to see them all.
 
 From `/proc`, which costs no fork at all:
 
@@ -135,6 +165,15 @@ table in `src/metrics_body.h` so they cannot drift apart.
 
 ## Known caveats
 
+- **`kind="oversize"` was removed from `gpon_port_receive_errors_total` in
+  v1.1.0; it never belonged there.** `etherStatsRxOversizePkts` /
+  `etherStatsTxOversizePkts` turned out to be exactly the `1519_max`
+  size bucket — two independent live counters matched exactly
+  (38605 == 38605 rx, 52482 == 52482 tx) — which is ordinary VLAN-tagged
+  full-size (1522 B) traffic being forwarded normally, not an error. It is
+  now under `gpon_port_frames_total{size="1519_max"}`. **A dashboard or
+  alert built on `gpon_port_receive_errors_total{kind="oversize"}` needs
+  updating** to use the new metric/label.
 - **`gpon_load*` is pinned and carries no signal.** Linux counts uninterruptible
   tasks in the load average, and this firmware keeps two kernel threads
   (`watchdog`, `led_swBlink`) permanently in D state. Load therefore sits at

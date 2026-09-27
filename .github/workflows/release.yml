@@ -35,6 +35,12 @@ jobs:
       - name: Build
         run: make httpd
 
+      # Host-native: src/wrap.h (the octet-counter wraparound extension) and
+      # the mib_* tables in src/metrics_body.h have no MIPS-specific code, so
+      # this runs with the runner's own gcc -- no Docker, no qemu-user.
+      - name: Test
+        run: make test
+
       # Asserts the shape the stick can actually load: ELF32, big-endian MIPS,
       # static, no INTERP, no shared deps. Any of these wrong and the binary is
       # silently unrunnable on the device.

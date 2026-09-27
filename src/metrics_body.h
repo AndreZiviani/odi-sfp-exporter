@@ -15,6 +15,7 @@
 #define ODI_METRICS_BODY_H
 
 #include "syscall.h"
+#include "wrap.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -529,11 +530,26 @@ next:
  *     non-destructive, so a scrape does not steal counts from the web UI or
  *     from a manual diag. Resetting is a separate explicit command
  *     (`diag mib reset counter port ...`), which nothing here ever runs.
- *   - Wider than 32 bits: port 2 read ifInOctets 4881693552, past 2^32. So
- *     there is no wrap to work around and no constraint on scrape interval.
+ *   - ifInOctets/ifOutOctets are meant to be wider than 32 bits: they are two
+ *     consecutive registers in odi-oss's own kernel driver
+ *     (odi_switch_mib.c, ODI_SW_MIB_WIDE), and one read of ifInOctets came
+ *     back 4881693552, past 2^32. But a scrape does not get to assume the
+ *     stick it is talking to is running that driver -- rc35 can load an
+ *     /etc/config/metricsd override built against a newer exporter than the
+ *     kernel underneath, and an older driver reports these as plain 32-bit
+ *     registers that DO wrap, at 4.29 GB. So the exporter tracks the last raw
+ *     reading per port and extends it into a monotonic 64-bit total itself
+ *     (wrap.h, extend_octets()) rather than trusting the field width. On a
+ *     stick with the fixed driver this is a no-op: the reading never goes
+ *     backwards, so the "extend" path never fires and the total tracks the
+ *     raw value exactly. See docs/DESIGN.md.
  *
- * Both properties together mean these are real Prometheus counters and go out
- * as-is, with no in-process accumulation.
+ * Both properties together mean these are real Prometheus counters. Every
+ * other family below is passed straight through as the digits diag printed,
+ * with no parsing or accumulation -- only the two octet counters go through
+ * extend_octets(), because they are the only ones a register width mismatch
+ * can plausibly wrap inside one scrape interval; see docs/METRICS.md for why
+ * packet/error/drop counters do not need the same treatment.
  *
  * Ports, established by correlating deltas over one 25 s window: port 2 is the
  * PON side and port 0 the host SerDes side. Their deltas mirror each other —
@@ -545,9 +561,12 @@ next:
  * counters only ever show the stick's own management traffic.
  *
  * Only the counters with an unambiguous unit are exported. The device prints 46
- * per port, the rest being packet-size histograms and half-duplex collision
- * counters that mean nothing on a SerDes or a PON; run the command by hand to
- * see those. Emitting them here would put octets and packets in one family.
+ * per port; most of the rest are half-duplex collision counters that mean
+ * nothing on a SerDes or a PON. The frame-size histogram (etherStats*Pkts*Octets)
+ * is exported too, as gpon_port_frames_total below -- it used to be left out
+ * for the same reason, but etherStatsRxOversizePkts turned out to be one of its
+ * buckets under an error-sounding name (see mib_frames). Run the command by
+ * hand to see the rest.
  */
 struct mib_key {
 	const char *key;	/* the label diag prints, matched exactly */
@@ -558,6 +577,9 @@ struct mib_fam {
 	const char *metric;
 	const char *help;
 	const struct mib_key *keys;	/* terminated by a NULL key */
+	struct octet_state *ostate;	/* non-NULL: extend a wrapped 32-bit
+					 * reading to a monotonic 64-bit total,
+					 * one entry per port (wrap.h) */
 };
 
 static const struct mib_key mib_rx_octets[] = {
@@ -589,7 +611,6 @@ static const struct mib_key mib_rx_errors[] = {
 	{ "etherStatsFragments",      ",kind=\"fragment\""  },
 	{ "etherStatsJabbers",        ",kind=\"jabber\""    },
 	{ "etherStatsRxUndersizePkts", ",kind=\"undersize\"" },
-	{ "etherStatsRxOversizePkts",  ",kind=\"oversize\""  },
 	{ 0, 0 }
 };
 static const struct mib_key mib_pause[] = {
@@ -598,25 +619,62 @@ static const struct mib_key mib_pause[] = {
 	{ 0, 0 }
 };
 
+/*
+ * Frame-size histogram, both directions in one family. `etherStatsRxOversizePkts`
+ * used to be exported as `gpon_port_receive_errors_total{kind="oversize"}`;
+ * it is not an error, it is this same "1519_max" bucket under another name --
+ * two independent live counters matched it exactly (38605 == 38605 rx,
+ * 52482 == 52482 tx) on a stick carrying ordinary VLAN-tagged full-size
+ * traffic. See docs/METRICS.md.
+ */
+static const struct mib_key mib_frames[] = {
+	{ "etherStatsRxPkts64Octets",         ",direction=\"rx\",size=\"64\""        },
+	{ "etherStatsRxPkts65to127Octets",    ",direction=\"rx\",size=\"65_127\""    },
+	{ "etherStatsRxPkts128to255Octets",   ",direction=\"rx\",size=\"128_255\""   },
+	{ "etherStatsRxPkts256to511Octets",   ",direction=\"rx\",size=\"256_511\""   },
+	{ "etherStatsRxPkts512to1023Octets",  ",direction=\"rx\",size=\"512_1023\""  },
+	{ "etherStatsRxPkts1024to1518Octets", ",direction=\"rx\",size=\"1024_1518\"" },
+	{ "etherStatsRxPkts1519toMaxOctets",  ",direction=\"rx\",size=\"1519_max\""  },
+	{ "etherStatsTxPkts64Octets",         ",direction=\"tx\",size=\"64\""        },
+	{ "etherStatsTxPkts65to127Octets",    ",direction=\"tx\",size=\"65_127\""    },
+	{ "etherStatsTxPkts128to255Octets",   ",direction=\"tx\",size=\"128_255\""   },
+	{ "etherStatsTxPkts256to511Octets",   ",direction=\"tx\",size=\"256_511\""   },
+	{ "etherStatsTxPkts512to1023Octets",  ",direction=\"tx\",size=\"512_1023\""  },
+	{ "etherStatsTxPkts1024to1518Octets", ",direction=\"tx\",size=\"1024_1518\"" },
+	{ "etherStatsTxPkts1519toMaxOctets",  ",direction=\"tx\",size=\"1519_max\""  },
+	{ 0, 0 }
+};
+
+/*
+ * Per-port running totals for the two wide counters, extended past whatever
+ * width the register underneath actually turns out to have. File-scope and
+ * never reset, so a value only ever grows for the life of the process -- the
+ * counter-reset semantics Prometheus expects from a `counter`. See wrap.h.
+ */
+static struct octet_state rx_octet_state[MIB_MAX_PORTS];
+static struct octet_state tx_octet_state[MIB_MAX_PORTS];
+
 static const struct mib_fam mib_fams[] = {
 	{ "gpon_port_receive_octets_total",
 	  "Octets received on a switch port. port=\"2\" is the PON side, \"0\" the host SerDes side.",
-	  mib_rx_octets },
+	  mib_rx_octets, rx_octet_state },
 	{ "gpon_port_transmit_octets_total",
-	  "Octets transmitted on a switch port.", mib_tx_octets },
+	  "Octets transmitted on a switch port.", mib_tx_octets, tx_octet_state },
 	{ "gpon_port_receive_packets_total",
-	  "Packets received on a switch port, by destination kind.", mib_rx_pkts },
+	  "Packets received on a switch port, by destination kind.", mib_rx_pkts, 0 },
 	{ "gpon_port_transmit_packets_total",
-	  "Packets transmitted on a switch port, by destination kind.", mib_tx_pkts },
+	  "Packets transmitted on a switch port, by destination kind.", mib_tx_pkts, 0 },
 	{ "gpon_port_receive_drops_total",
-	  "Received frames dropped by the bridge on a switch port.", mib_rx_drops },
+	  "Received frames dropped by the bridge on a switch port.", mib_rx_drops, 0 },
 	{ "gpon_port_transmit_drops_total",
-	  "Frames dropped instead of being transmitted on a switch port.", mib_tx_drops },
+	  "Frames dropped instead of being transmitted on a switch port.", mib_tx_drops, 0 },
 	{ "gpon_port_receive_errors_total",
-	  "Malformed frames received on a switch port, by error kind.", mib_rx_errors },
+	  "Malformed frames received on a switch port, by error kind.", mib_rx_errors, 0 },
 	{ "gpon_port_pause_frames_total",
-	  "802.3x pause frames seen on a switch port.", mib_pause },
-	{ 0, 0, 0 }
+	  "802.3x pause frames seen on a switch port.", mib_pause, 0 },
+	{ "gpon_port_frames_total",
+	  "Frames seen on a switch port, bucketed by size in octets.", mib_frames, 0 },
+	{ 0, 0, 0, 0 }
 };
 
 /*
@@ -627,7 +685,7 @@ static const struct mib_fam mib_fams[] = {
  * for every port and Prometheus rejects a duplicated header.
  */
 static void mib_emit_key(int fd, const char *buf, const char *metric,
-			 const struct mib_key *mk)
+			 const struct mib_key *mk, struct octet_state *ostates)
 {
 	char port[8];
 	unsigned long i = 0, plen = 0;
@@ -678,7 +736,27 @@ static void mib_emit_key(int fd, const char *buf, const char *metric,
 		put_fd(fd, "\"");
 		put_fd(fd, mk->labels);
 		put_fd(fd, "} ");
-		write_all(fd, buf + vs, k - vs);
+
+		/* ostates is only non-NULL for ifInOctets/ifOutOctets. An
+		 * out-of-range port index falls back to the raw digits
+		 * verbatim -- the same thing every other counter here does --
+		 * rather than guessing which array slot it would be. */
+		if (ostates) {
+			int pi = port_index(port, plen);
+
+			if (pi >= 0) {
+				unsigned long long raw = parse_u64(buf + vs, k - vs);
+				char digits[20];
+				unsigned long n = format_u64(digits,
+							      extend_octets(&ostates[pi], raw));
+
+				write_all(fd, digits, n);
+			} else {
+				write_all(fd, buf + vs, k - vs);
+			}
+		} else {
+			write_all(fd, buf + vs, k - vs);
+		}
 		put_fd(fd, "\n");
 
 next:
@@ -694,7 +772,7 @@ static void metric_port_mib(int fd, const char *buf)
 		emit_header(fd, mib_fams[f].metric, mib_fams[f].help, "counter");
 		for (k = 0; mib_fams[f].keys[k].key; k++)
 			mib_emit_key(fd, buf, mib_fams[f].metric,
-				     &mib_fams[f].keys[k]);
+				     &mib_fams[f].keys[k], mib_fams[f].ostate);
 	}
 }
 

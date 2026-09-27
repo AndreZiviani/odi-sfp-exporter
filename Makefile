@@ -90,10 +90,10 @@ else
 
 RUN   := docker run --rm -v "$(CURDIR)":/src -w /src $(IMAGE)
 
-.PHONY: all httpd image verify isa run deploy shell clean release sums
+.PHONY: all httpd image verify isa test run deploy shell clean release sums
 
 # What you almost always want: the exporter, checked.
-all: httpd verify isa
+all: httpd verify isa test
 
 image:
 	@TOOLCHAIN_IMAGE='$(IMAGE)' scripts/toolchain-image.sh >/dev/null
@@ -106,6 +106,17 @@ httpd: image
 	$(RUN) make IN_CONTAINER=1 BUILD_ID='$(BUILD_ID)' $(BUILD)/metricsd
 
 ## --- inspection --------------------------------------------------------------
+
+# src/wrap.h (the octet-counter wraparound logic) and the mib_* tables in
+# src/metrics_body.h have no MIPS-specific code, so they are tested with the
+# HOST compiler -- no Docker, no qemu-user. test_wrap.c is a real unit test;
+# test_metrics.sh is a fixture check on the mib_* tables themselves, since
+# there is no host binary to point a fake diag output at.
+test:
+	@mkdir -p $(BUILD)
+	$(CC) -std=c99 -Wall -Wextra -o $(BUILD)/test_wrap test/test_wrap.c
+	$(BUILD)/test_wrap
+	sh test/test_metrics.sh
 
 verify: image
 	$(RUN) scripts/verify.sh $(BIN)

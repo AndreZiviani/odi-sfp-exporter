@@ -38,8 +38,11 @@ The result is 8 KB and takes ~280 ms per scrape, most of which is forking
 ```
 src/metricsd.c        the exporter: socket, accept loop, HTTP response
 src/metrics_body.h    the metrics themselves; every metric name lives here
+src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
 src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
 src/start.S           _start and a 6-argument syscall stub for setsockopt
+test/test_wrap.c      host-native unit test for src/wrap.h (`make test`)
+test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
 scripts/verify.sh     asserts ELF32 / big endian / MIPS / static / no INTERP
 scripts/toolchain-image.sh  prints (and pulls) the pinned toolchain image
 scripts/deploy.sh     push a file to the stick over netcat
@@ -77,6 +80,60 @@ output, which the exposition format forbids.
 `-EB` (big-endian; `mips-`, never `mipsel-`), `-G0 -fno-pic -mno-abicalls`
 (a hand-written `_start` never sets up `$gp`, so any gp-relative or GOT
 reference faults), and `-msoft-float` (RLX cores have no FPU).
+
+**Octet counters are extended to 64 bits in-process, not polled in a
+background thread.** `gpon_port_{receive,transmit}_octets_total` come from
+`ifInOctets`/`ifOutOctets`, which odi-oss's kernel driver already composes
+from two consecutive 32-bit registers (`odi_switch_mib.c`,
+`ODI_SW_MIB_WIDE`) — a correctly matched image reports the real 64-bit
+value and there is nothing to extend. The problem is that "correctly
+matched" is not guaranteed: `rc35` prefers an `/etc/config/metricsd`
+override over the image's own `/bin/metricsd`, so an exporter build can end
+up paired with an older kernel that still reports these as plain 32-bit
+registers wrapping at 4.29 GB — observed on stick `vero`. Three designs were
+available:
+
+1. **Trust the register width and do nothing.** Correct once every fielded
+   image has the fix, wrong (and silently so — `rate()` cannot distinguish a
+   wrap from a reset) until then.
+2. **Extend in-process on every real scrape** (chosen): track the last raw
+   reading and a running 64-bit total per port (`src/wrap.h`,
+   `extend_octets()`); a reading that goes backwards is treated as exactly
+   one 32-bit wraparound. This rides on the diag invocation the scrape is
+   already paying for — no new fork, no new failure domain — and degrades
+   to option 1's behaviour for free once the underlying register really is
+   64-bit, since the value then never goes backwards.
+3. **Poll the counters from a background loop independent of scrapes**, so a
+   wrap between two Prometheus scrapes is caught even if it happens more
+   than once per interval. Rejected for this binary: it is single-threaded
+   and freestanding by design (see above), so this would mean a second
+   process reading the same registers on its own clock and a shared,
+   synchronized 64-bit value between it and the request handler — real
+   engineering for a case (>4.29 GB, i.e. >572 Mbit/s sustained for a full
+   60 s scrape interval) this hardware cannot produce. A shorter
+   `scrape_interval` buys the same headroom for zero code.
+
+The one thing option 2 does not cover is exactly option 3's case: two wraps
+inside one scrape interval. That bound is documented in docs/METRICS.md
+rather than engineered around, because closing it costs a second daemon
+process and shared state for a rate this device cannot sustain.
+
+The same reasoning is why no other MIB counter gets this treatment. Every
+other family (packets, drops, errors, pause frames, the frame-size
+histogram added in v1.1.0) is a single, genuinely 32-bit register per
+`odi_switch_mib.c` — wrapping one of those needs a sustained rate many
+orders of magnitude higher than a GPON ONU's ports forward.
+
+**`gpon_port_frames_total` replaces `oversize` as an error kind.**
+`etherStatsRxOversizePkts`/`etherStatsTxOversizePkts` are register aliases
+for the `1519_max` frame-size bucket (`odi_switch_mib.c` maps both the
+"oversize" and "Pkts1519toMax" MIB names to the same counter row) — not a
+distinct error count. Exporting it as
+`gpon_port_receive_errors_total{kind="oversize"}` put ordinary tagged
+full-size traffic on error dashboards. v1.1.0 exports the whole
+`etherStats*Pkts*Octets` histogram (both directions, all seven RFC 1757
+buckets each register names unambiguously) as its own counter family
+instead, and drops `oversize` from the errors kind list.
 
 **MIPS diverges from the generic ABI in three families of constants**, all
 silent when wrong: `SOCK_STREAM` is 2 and `SOCK_DGRAM` is 1 (swapped),

@@ -1,6 +1,11 @@
 # Changelog
 
-## v1.1.0
+## v1.1.1
+
+(v1.1.0 was tagged and pushed but its CI run failed on `make test` writing
+into a root-owned `build/` on the Linux runner; fixed and re-tagged as
+v1.1.1 rather than force-pushing over the existing v1.1.0 tag. No v1.1.0
+release was published.)
 
 **Metric rename — dashboards and alerts using `kind="oversize"` need
 updating.**

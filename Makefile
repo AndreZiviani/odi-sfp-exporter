@@ -112,10 +112,16 @@ httpd: image
 # HOST compiler -- no Docker, no qemu-user. test_wrap.c is a real unit test;
 # test_metrics.sh is a fixture check on the mib_* tables themselves, since
 # there is no host binary to point a fake diag output at.
+# A temp file, not $(BUILD)/test_wrap: on CI $(BUILD) is created by `make
+# httpd`'s container as root (see the `sums` comment below), so a host-side
+# write into it fails with EACCES on Linux runners -- the same trap that bit
+# `sums` once already.
 test:
-	@mkdir -p $(BUILD)
-	$(CC) -std=c99 -Wall -Wextra -o $(BUILD)/test_wrap test/test_wrap.c
-	$(BUILD)/test_wrap
+	@t=$$(mktemp); \
+	$(CC) -std=c99 -Wall -Wextra -o "$$t" test/test_wrap.c; rc=$$?; \
+	if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \
+	rm -f "$$t"; \
+	exit $$rc
 	sh test/test_metrics.sh
 
 verify: image

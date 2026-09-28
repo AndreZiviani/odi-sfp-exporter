@@ -121,6 +121,19 @@ every tag describe as `unknown`; CI always fetches full history.
 - Values read from `diag` are emitted as the literal text it printed, never
   parsed to a number and back -- see "Implementation notes" in
   `docs/DESIGN.md` before changing anything in the metric-formatting path.
+- **Every wait on another process is bounded.** This is single-threaded and
+  serves the socket, so anything that blocks on a child blocks the whole
+  exporter (hardware trial rc3, claro, 2026-09-28: a stuck omcid parked
+  `run_to_buf()`'s `read()` forever and metricsd stopped accepting
+  connections entirely, though it was otherwise fine). `run_to_buf()` and
+  `run_script_to_buf()` (`src/syscall.h`) take a `timeout_ms` and poll the
+  child's pipe rather than block on it, SIGKILL + reap on expiry
+  (`drain_bounded()`/`kill_and_reap()`); every new caller must pass a real
+  bound (`OMCICLI_TIMEOUT_MS`, `DIAG_TIMEOUT_MS` in `src/metrics_body.h`) and
+  report the failure as a metric (`gpon_omci_up`, `gpon_diag_up`) rather than
+  going silent. There is no libc `alarm()`/`select()` here -- this is
+  `poll(2)` over the raw o32 syscall layer, which has no MIPS-specific
+  divergence (unlike the socket/IPC calls elsewhere in `src/syscall.h`).
 
 ## Testing on a stick safely
 

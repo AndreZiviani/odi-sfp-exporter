@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v1.1.2
+
+- **Every child metricsd forks is now bounded.** Hardware trial (rc3, claro,
+  2026-09-28): a stuck omcid (see odi-oss CHANGELOG, the respawn/`vq_ensure()`
+  bug) left `run_to_buf()`'s blind `read()` on the `omcicli` child parked
+  forever, so the whole exporter -- single-threaded -- stopped accepting new
+  connections even though it was otherwise healthy. `run_to_buf()` and
+  `run_script_to_buf()` (`src/syscall.h`) now poll the child's pipe with a
+  timeout (`OMCICLI_TIMEOUT_MS` 2 s, `DIAG_TIMEOUT_MS` 3 s,
+  `src/metrics_body.h`) and SIGKILL + reap the child instead of waiting on it
+  past that bound.
+- Added `gpon_omci_up`: 0 when `omcicli dump srvflow` timed out against a
+  stuck omcid, so the failure shows up as a metric rather than as silence
+  (`gpon_omci_services` was previously just omitted). `gpon_diag_up` already
+  covered the same case for `/bin/diag` and needed no new metric, only the
+  bound.
 - CI: a `v*` tag release now uses the matching `## <tag>` section of this
   file as its release body, falling back to the previous auto-generated
   notes when a tag has no section.

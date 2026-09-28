@@ -20,6 +20,26 @@
 #define DIAG_PATH "/bin/diag"
 
 /*
+ * Bounds for every child this exporter forks, in milliseconds. Both go
+ * through drain_bounded() (syscall.h): past this budget the child is
+ * SIGKILLed and reaped rather than left to hang the single-threaded HTTP
+ * server (found on hardware, rc3, claro, 2026-09-28: a stuck omcid left
+ * metricsd parked in read() with 9100 not accepting new connections).
+ *
+ * OMCICLI_TIMEOUT_MS: the exporter's own requirement -- `omcicli dump
+ * srvflow` must answer within 2 s of a respawn (odi-oss qemu-test.sh
+ * exercises exactly this bound against a real omcid).
+ *
+ * DIAG_TIMEOUT_MS: diag costs ~32-48 ms per scrape even for the heaviest
+ * script measured (run_script_to_buf's comment), so 3 s is over 60x
+ * headroom -- generous on purpose, since a diag that is merely slow must
+ * still be allowed to finish, only one that is actually wedged should be
+ * killed.
+ */
+#define OMCICLI_TIMEOUT_MS 2000
+#define DIAG_TIMEOUT_MS    3000
+
+/*
  * Build identity, reported as gpon_exporter_build_info.
  *
  * This matters more here than it looks. The exporter can be replaced WITHOUT
@@ -460,7 +480,7 @@ static void metric_counters(int fd, const char *name, const char *help,
 	unsigned long i = 0;
 	int have_header = 0;
 
-	if (run_to_buf(DIAG_PATH, argv, buf, sizeof(buf)) <= 0)
+	if (run_to_buf(DIAG_PATH, argv, buf, sizeof(buf), DIAG_TIMEOUT_MS) <= 0)
 		return;
 	while (buf[i]) {
 		unsigned long ls = i, le = i, col, v, vstart, tail, a, b, n;
@@ -934,21 +954,42 @@ static void emit_diag_health(int fd, int up, unsigned long parsed,
  */
 #define OMCICLI_PATH "/bin/omcicli"
 
+static void emit_omci_up(int fd, int up)
+{
+	emit_header(fd, "gpon_omci_up",
+		    "1 when omcicli got an answer from omcid within "
+		    "OMCICLI_TIMEOUT_MS; 0 means omcid did not answer in time "
+		    "and the child was killed -- gpon_omci_services below is "
+		    "stale or absent.", "gauge");
+	put_fd(fd, "gpon_omci_up ");
+	put_fd(fd, up ? "1\n" : "0\n");
+}
+
 static void emit_omci_metrics(int fd)
 {
 	static char *const argv[] = { "omcicli", "dump", "srvflow", 0 };
 	char buf[8192];
 	unsigned long i, used = 0;
-	long n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1);
+	long n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1,
+			    OMCICLI_TIMEOUT_MS);
 
-	if (n <= 0)
-		return;		/* no omcicli, or no daemon behind it: say nothing */
+	if (n <= 0) {
+		/* n == -1: no omcicli, or the fork/pipe setup itself failed --
+		 * nothing ran, so there is nothing to call "down". n == -2:
+		 * omcicli ran but omcid never answered it within the bound
+		 * (the respawn/0x800 bug this metric exists to catch) -- that
+		 * IS down, and must say so rather than go quiet. */
+		if (n == -2)
+			emit_omci_up(fd, 0);
+		return;
+	}
 	buf[n] = 0;
 	for (i = 0; buf[i]; i++)
 		if (buf[i] == 'U' && buf[i + 1] == 's' && buf[i + 2] == 'e' &&
 		    buf[i + 3] == 'd' && buf[i + 4] == ':' && buf[i + 5] == ' ' &&
 		    buf[i + 6] == '1')
 			used++;
+	emit_omci_up(fd, 1);
 	emit_header(fd, "gpon_omci_services",
 		    "Bridge connections (services) the OLT has provisioned and the ONU "
 		    "installed, from `omcicli dump srvflow`. 0 at O5 means synced but "
@@ -975,7 +1016,8 @@ static void emit_diag_metrics(int fd)
 		expected++;
 
 	build_diag_script(script, sizeof(script));
-	if (run_script_to_buf(DIAG_PATH, argv, script, buf, sizeof(buf)) <= 0) {
+	if (run_script_to_buf(DIAG_PATH, argv, script, buf, sizeof(buf),
+			      DIAG_TIMEOUT_MS) <= 0) {
 		emit_diag_health(fd, 0, 0, expected);
 		return;
 	}

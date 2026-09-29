@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `OdiPortReceiveErrors` no longer counts `kind="undersize"` on port 3 (the
+  CPU port). Every upstream OMCI reply crosses it as a 52-byte frame (the
+  48-byte baseline message plus the FCS, unpadded so the OLT receives
+  exactly 48 bytes), which the switch counts as undersize and forwards; the
+  stock firmware does the same. On a line whose OLT polls, the alert fired
+  permanently (about 160 per 15 min on ISP2). CRC, fragment and jabber errors
+  on port 3 still count. docs/METRICS.md, "Known caveats", has the evidence;
+  `prometheus/alerts_test.yml` covers both cases.
+
 ## v1.2.0
 
 - Added `gpon_boot_count` (boots of the image since the last power cycle) and

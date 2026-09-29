@@ -161,10 +161,17 @@ groups:
 
       # Port 2 is the PON side, port 0 the host SerDes side. Any increase of
       # these on a healthy line is unusual; 10 in 15 minutes rules out one
-      # stray frame.
+      # stray frame. Port 3 (the CPU) undersize is left out: every upstream
+      # OMCI reply crosses it as a 52-byte frame, on the stock firmware too,
+      # so it counts the OLT polling, not a fault (docs/METRICS.md, "Known
+      # caveats"). Port 3 CRC, fragment and jabber errors still count.
       - alert: OdiPortReceiveErrors
         expr: |
-          sum by (job, instance, port) (increase(gpon_port_receive_errors_total[15m])) > 10
+          sum by (job, instance, port) (
+              increase(gpon_port_receive_errors_total{kind!="undersize"}[15m])
+            or
+              increase(gpon_port_receive_errors_total{kind="undersize",port!="3"}[15m])
+          ) > 10
         for: 15m
         labels:
           severity: warning
@@ -173,7 +180,7 @@ groups:
           description: >-
             {{ $value | printf "%.0f" }} malformed frames (CRC, fragments,
             jabbers, undersize) in 15 minutes on port {{ $labels.port }}
-            (2 is the PON side, 0 the host side), sustained for 15 minutes.
+            (2 is the PON side, 0 the host side, 3 the CPU), sustained for 15 minutes.
 
   - name: odi-optics
     rules:

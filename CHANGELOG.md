@@ -44,6 +44,21 @@
   metrics they never fire. `make rules` runs `promtool check rules` and the
   unit tests in `prometheus/alerts_test.yml` in a digest-pinned
   `prom/prometheus` image; CI runs it on every push and PR.
+- Added `gpon_provision_*`: what the OLT provisioned, so an ISP plan change
+  (speed tier, VLAN, T-CONT) is visible in Grafana. `gpon_provision_tconts`
+  and `gpon_provision_tcont_info{alloc_id}` from `/proc/odi_gpon` (the
+  Alloc-IDs the OLT assigned by PLOAM; no fork); from `omcicli provision`,
+  one more fork under the same 2 s bound as `dump srvflow`, and skipped when
+  that one timed out: `gpon_provision_gem_ports`,
+  `gpon_provision_gem_port_info{gem_port,direction}`,
+  `gpon_provision_vlan_info{vlan,source}`,
+  `gpon_provision_traffic_descriptors`,
+  `gpon_provision_traffic_descriptor_{cir,pir}_bytes_per_second{descriptor}`,
+  `gpon_provision_mib_entities` and `gpon_provision_mib_data_sync`. Needs an
+  odi-oss image with `omcli provision` and the `alloc_ids` line; anything
+  older, or the vendor `omci_app`, leaves the families absent. The parsing
+  lives in `src/provision.h`, pure text in and out, and `make test` now runs
+  it against fixtures and goldens (`test/test_provision.c`).
 
 ## v1.1.2
 

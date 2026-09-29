@@ -1,0 +1,7 @@
+gem me=2 port=657 direction=3 tcont_me=32768 us_td=1 ds_td=2
+gem me=36862 port=4094 direction=2 tcont_me=0 us_td=0 ds_td=0
+vlan vid=100 source=ext_vlan_filter
+vlan vid=100 source=ext_vlan_treatment
+td me=1 cir=12500000 pir=62500000 cbs=0 pbs=0
+td me=2 cir=0 pir=125000000 cbs=0 pbs=0
+summary rows=19 tconts=1 gem_ports=2 vlans=2 traffic_descriptors=2 services=2 mib_data_sync=28

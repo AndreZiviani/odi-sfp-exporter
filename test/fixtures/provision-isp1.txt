@@ -1,0 +1,18 @@
+tcont me=32768 alloc_id=282 index=0
+tcont me=32769 alloc_id=794 index=1
+tcont me=32770 alloc_id=1050 index=2
+tcont me=32771 alloc_id=1306 index=3
+tcont me=32772 alloc_id=538 index=4
+gem me=1 port=4095 direction=2 tcont_me=0 us_td=0 ds_td=0
+gem me=2 port=1434 direction=3 tcont_me=32768 us_td=0 ds_td=0
+gem me=3 port=1690 direction=3 tcont_me=32769 us_td=0 ds_td=0
+gem me=4 port=1818 direction=3 tcont_me=32770 us_td=0 ds_td=0
+gem me=5 port=1946 direction=3 tcont_me=32771 us_td=0 ds_td=0
+gem me=6 port=1562 direction=3 tcont_me=32772 us_td=0 ds_td=0
+vlan vid=1 source=ext_vlan_treatment
+vlan vid=10 source=vlan_filter
+vlan vid=11 source=vlan_filter
+vlan vid=12 source=vlan_filter
+vlan vid=13 source=vlan_filter
+vlan vid=14 source=vlan_filter
+summary rows=161 tconts=5 gem_ports=6 vlans=6 traffic_descriptors=0 services=6 mib_data_sync=184

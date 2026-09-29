@@ -1,0 +1,31 @@
+# HELP gpon_provision_tconts T-CONTs (Alloc-IDs) the OLT assigned by PLOAM, from /proc/odi_gpon.
+# TYPE gpon_provision_tconts gauge
+gpon_provision_tconts 0
+# HELP gpon_provision_gem_ports GEM ports the OLT created (GEM port network CTP), from `omcicli provision`.
+# TYPE gpon_provision_gem_ports gauge
+gpon_provision_gem_ports 2
+# HELP gpon_provision_gem_port_info Always 1, one series per GEM port the OLT created, with its direction.
+# TYPE gpon_provision_gem_port_info gauge
+gpon_provision_gem_port_info{gem_port="657",direction="bidirectional"} 1
+gpon_provision_gem_port_info{gem_port="4094",direction="downstream"} 1
+# HELP gpon_provision_vlan_info Always 1, one series per VLAN the OLT provisioned and where: vlan_filter (VLAN tagging filter data), ext_vlan_filter or ext_vlan_treatment (extended VLAN tagging operation, the VID matched or the VID set).
+# TYPE gpon_provision_vlan_info gauge
+gpon_provision_vlan_info{vlan="100",source="ext_vlan_filter"} 1
+gpon_provision_vlan_info{vlan="100",source="ext_vlan_treatment"} 1
+# HELP gpon_provision_traffic_descriptors Traffic descriptors (ME 280) the OLT created: its rate limits.
+# TYPE gpon_provision_traffic_descriptors gauge
+gpon_provision_traffic_descriptors 2
+# HELP gpon_provision_traffic_descriptor_cir_bytes_per_second Committed information rate of each traffic descriptor the OLT created, bytes per second (G.988 9.2.12).
+# TYPE gpon_provision_traffic_descriptor_cir_bytes_per_second gauge
+gpon_provision_traffic_descriptor_cir_bytes_per_second{descriptor="1"} 12500000
+gpon_provision_traffic_descriptor_cir_bytes_per_second{descriptor="2"} 0
+# HELP gpon_provision_traffic_descriptor_pir_bytes_per_second Peak information rate of each traffic descriptor the OLT created, bytes per second (G.988 9.2.12).
+# TYPE gpon_provision_traffic_descriptor_pir_bytes_per_second gauge
+gpon_provision_traffic_descriptor_pir_bytes_per_second{descriptor="1"} 62500000
+gpon_provision_traffic_descriptor_pir_bytes_per_second{descriptor="2"} 125000000
+# HELP gpon_provision_mib_entities Managed entities the OLT created or wrote, held by omcid.
+# TYPE gpon_provision_mib_entities gauge
+gpon_provision_mib_entities 19
+# HELP gpon_provision_mib_data_sync The MIB data sync counter: moves on every Create, Set or Delete from the OLT (one byte, so it wraps), back to 0 on a MIB reset.
+# TYPE gpon_provision_mib_data_sync gauge
+gpon_provision_mib_data_sync 28

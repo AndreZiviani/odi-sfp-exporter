@@ -16,6 +16,7 @@
 
 #include "syscall.h"
 #include "wrap.h"
+#include "resetinfo.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -1163,6 +1164,54 @@ next:
 	put_fd(fd, "} 1\n");
 }
 
+/*
+ * The boot counter and why the previous boot ended, from odi-oss's
+ * /proc/odi_ramlog_prev (src/resetinfo.h has the format). Both are fixed for
+ * the life of a boot, so the first successful read is kept and later scrapes
+ * do not re-read it: the kernel renders the whole saved ramlog, about 8 KB,
+ * on every read of that file. One bounded read of its first 255 bytes. Absent
+ * on a stock kernel, or an odi-oss kernel without the ramlog: nothing is
+ * emitted, and each scrape tries again.
+ */
+static struct resetinfo reset_info;
+static int reset_info_ok;
+
+static void metric_reset_info(int fd)
+{
+	if (!reset_info_ok) {
+		char buf[256];
+
+		if (read_file("/proc/odi_ramlog_prev", buf, sizeof(buf)) <= 0)
+			return;
+		reset_info_ok = resetinfo_parse(buf, &reset_info);
+		if (!reset_info_ok)
+			return;
+	}
+
+	emit_header(fd, "gpon_boot_count",
+		    "Boots of this image since the last power cycle, this one "
+		    "included, from /proc/odi_ramlog_prev. Restarts at 1 after a "
+		    "power cycle.", "gauge");
+	put_fd(fd, "gpon_boot_count ");
+	put_fd(fd, reset_info.boot);
+	put_fd(fd, "\n");
+
+	if (!reset_info.reason[0])
+		return;
+	emit_header(fd, "gpon_last_reset_reason",
+		    "Always 1. reason is why the previous boot ended, as the kernel "
+		    "recorded it: wdt_client (with client), wdt_mem, wdt_userland, "
+		    "reboot, halt, poweroff, panic, oops, power or unknown.",
+		    "gauge");
+	put_fd(fd, "gpon_last_reset_reason{reason=\"");
+	put_fd(fd, reset_info.reason);
+	if (reset_info.client[0]) {
+		put_fd(fd, "\",client=\"");
+		put_fd(fd, reset_info.client);
+	}
+	put_fd(fd, "\"} 1\n");
+}
+
 static void emit_metrics(int fd)
 {
 	put_fd(fd, "# HELP gpon_exporter_up Always 1. Confirms the exporter ran.\n"
@@ -1172,6 +1221,7 @@ static void emit_metrics(int fd)
 	metric_build_info(fd);
 	metric_image_info(fd);
 	metric_uptime(fd);
+	metric_reset_info(fd);
 	metric_loadavg(fd);
 	metric_meminfo(fd);
 	metric_netdev(fd);

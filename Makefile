@@ -57,7 +57,7 @@ endif
 
 LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
 
-HDRS := src/syscall.h src/metrics_body.h
+HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h
 
 # BUILD_ID is compiled in, but it is a make VARIABLE -- make cannot see it
 # change, so with the sources untouched it will not rebuild and the binary keeps
@@ -107,9 +107,10 @@ httpd: image
 
 ## --- inspection --------------------------------------------------------------
 
-# src/wrap.h (the octet-counter wraparound logic) and the mib_* tables in
-# src/metrics_body.h have no MIPS-specific code, so they are tested with the
-# HOST compiler -- no Docker, no qemu-user. test_wrap.c is a real unit test;
+# src/wrap.h (the octet-counter wraparound logic), src/resetinfo.h (the
+# /proc/odi_ramlog_prev parse) and the mib_* tables in src/metrics_body.h have
+# no MIPS-specific code, so they are tested with the HOST compiler -- no
+# Docker, no qemu-user. test_wrap.c and test_resetinfo.c are real unit tests;
 # test_metrics.sh is a fixture check on the mib_* tables themselves, since
 # there is no host binary to point a fake diag output at.
 # A temp file, not $(BUILD)/test_wrap: on CI $(BUILD) is created by `make
@@ -117,11 +118,13 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@t=$$(mktemp); \
-	$(CC) -std=c99 -Wall -Wextra -o "$$t" test/test_wrap.c; rc=$$?; \
-	if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \
-	rm -f "$$t"; \
-	exit $$rc
+	@for u in test_wrap test_resetinfo; do \
+		t=$$(mktemp); \
+		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
+		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \
+		rm -f "$$t"; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done
 	sh test/test_metrics.sh
 
 verify: image

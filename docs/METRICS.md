@@ -102,6 +102,8 @@ From `/proc`, which costs no fork at all:
 | metric | source |
 |---|---|
 | `gpon_uptime_seconds` | `/proc/uptime` |
+| `gpon_boot_count` | `/proc/odi_ramlog_prev` — boots of this image since the last power cycle, this one included |
+| `gpon_last_reset_reason{reason="...",client="..."}` | `/proc/odi_ramlog_prev` — always 1; why the previous boot ended, see below |
 | `gpon_load{1,5,15}` | `/proc/loadavg` |
 | `gpon_memory_bytes{kind="total\|free\|buffers\|cached"}` | `/proc/meminfo` |
 | `gpon_network_{receive,transmit}_{bytes,packets,errs,drop}_total{device="..."}` | `/proc/net/dev` |
@@ -126,6 +128,40 @@ what remains looks like a healthy scrape with no forwarding data.
 
 **A metric that cannot be read is omitted entirely, never emitted as zero.** An
 absent series is honest; `0` reads as a genuine measurement of zero dBm.
+
+### Why the stick last reset
+
+odi-oss's kernel records why each boot ends, at the moment it knows, in DRAM
+that survives a reset, and prints it on the next boot as `reason=` in the
+second line of `/proc/odi_ramlog_prev`. The exporter turns that line into one
+series:
+
+| `reason` | meaning |
+|---|---|
+| `wdt_client` | the kernel watchdog reset the board because a registered client missed its ping deadline; `client` names it (e.g. `client="omcid"`) |
+| `wdt_mem` | the watchdog reset it because `MemAvailable` stayed below the floor |
+| `wdt_userland` | the watchdog reset it because userland never confirmed the boot |
+| `reboot`, `halt`, `poweroff` | the `reboot` syscall path (a halt or power-off ends in a watchdog reset about 42 s later) |
+| `panic`, `oops` | a kernel panic, or an oops that did not panic |
+| `power` | DRAM lost its contents: a power cycle or a cold boot |
+| `unknown` | the DRAM survived but nothing recorded a reason: a hang the hardware watchdog caught, an emergency restart, or a previous boot of an image too old to record one |
+
+`client` is present only for `wdt_client`. Both series are absent on a stock
+kernel (no `/proc/odi_ramlog_prev`), and `gpon_last_reset_reason` alone on an
+odi-oss kernel from before the reason existed (the line has no `reason=`).
+Values are fixed for the life of a boot, so the file is read once, on the
+first scrape that finds it, and not again: the kernel renders the whole saved
+ramlog, about 8 KB, on every read. The read is bounded to its first 255
+bytes.
+
+A watchdog reset since the last scrape, for an alert:
+
+```promql
+gpon_last_reset_reason{reason=~"wdt_.*"} and on(instance) changes(gpon_boot_count[15m]) > 0
+```
+
+`gpon_boot_count` restarts at 1 after a power cycle, so
+`resets(gpon_boot_count[1d])` counts those, and `changes()` any boot at all.
 
 ## One fork per scrape, not one per metric
 

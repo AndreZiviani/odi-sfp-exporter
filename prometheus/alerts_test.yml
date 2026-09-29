@@ -41,7 +41,10 @@ tests:
         values: '1790641247x60'
       - series: 'gpon_alarm{job="odi",instance="s1",alarm="los"}'
         values: '0x60'
+      - series: 'gpon_uncommitted{job="odi",instance="s1"}'
+        values: '0x60'
     alert_rule_test:
+      - {eval_time: 60m, alertname: OdiUncommittedImage, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiExporterDown, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiExporterAbsent, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiOnuNotOperational, exp_alerts: []}
@@ -360,3 +363,22 @@ tests:
             exp_annotations:
               summary: "s1: lastgood_hs.xml is gone"
               description: "lastgood_hs.xml is no longer on the config partition. It holds the provisioning identity (lastgood_hs.xml: GPON serial and MAC; lastgood.xml: PLOAM password, LOID, VLAN). Do not reboot: restore from the last backup first."
+
+  # A trial left uncommitted: a warning after 30 minutes, gone once committed.
+  # A stick with no slot state (older image, stock firmware) never fires.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_uncommitted{job="odi",instance="s1"}'
+        values: '1x60 0x30'
+      - series: 'gpon_exporter_up{job="odi",instance="s2"}'
+        values: '1x90'
+    alert_rule_test:
+      - {eval_time: 25m, alertname: OdiUncommittedImage, exp_alerts: []}
+      - eval_time: 45m
+        alertname: OdiUncommittedImage
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: running an uncommitted image"
+              description: "For 30 minutes s1 has run a slot that sw_commit does not name in at least one copy of the U-Boot environment (gpon_boot_slot, gpon_committed_slot say which): a trial boot. The next reset boots the other slot. Once the trial is checked, commit it on the stick with nv commit <slot> and slot-state.sh; otherwise reboot it back."
+      - {eval_time: 75m, alertname: OdiUncommittedImage, exp_alerts: []}

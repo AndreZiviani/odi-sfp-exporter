@@ -342,6 +342,25 @@ groups:
             Free plus buffers plus cached memory has been under 4 MiB for 10
             minutes. The kernel watchdog resets the stick at 2 MiB available.
 
+      # A trial boot nobody committed. On odi-oss a trial is only ever
+      # committed by hand (nv commit), so this is the reminder: the next
+      # reset, for any reason, boots the other slot. From
+      # /var/run/odi-slot, which odi-oss writes at boot.
+      - alert: OdiUncommittedImage
+        expr: gpon_uncommitted == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: running an uncommitted image"
+          description: >-
+            For 30 minutes {{ $labels.instance }} has run a slot that
+            sw_commit does not name in at least one copy of the U-Boot
+            environment (gpon_boot_slot, gpon_committed_slot say which): a
+            trial boot. The next reset boots the other slot. Once the trial
+            is checked, commit it on the stick with nv commit <slot> and
+            slot-state.sh; otherwise reboot it back.
+
   - name: odi-config
     rules:
       # A new hash is a new series for the same file, so two series for one

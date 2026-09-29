@@ -22,6 +22,16 @@
   (`make test`); `struct stat64` comes from the toolchain `<asm/stat.h>`
   rather than a hand-copied o32 layout. See docs/METRICS.md for the alert
   expressions.
+- New boot-slot metrics from odi-oss `/var/run/odi-slot` (written by its
+  `slot-state.sh` at boot; one small tmpfs file, no fork, no parsing of the
+  U-Boot environment here): `gpon_boot_slot{slot}`,
+  `gpon_committed_slot{copy="primary|fallback",slot}` and
+  `gpon_uncommitted` (1 on a trial boot nobody committed). A value the file
+  leaves empty omits that series, and no file omits all three. Rendering is
+  host-tested (`test/test_slot_state.c`, in `make test`). docs/METRICS.md.
+- New alert `OdiUncommittedImage` (warning): `gpon_uncommitted == 1` for 30
+  minutes, with a promtool test. docs/ALERTS.md.
+
 - Added Prometheus alerting rules, `prometheus/alerts.yml`, documented in
   docs/ALERTS.md: exporter down or absent, diag and OMCI health, ONU not in
   O5, GPON alarms, O5 with no OMCI services and services dropping, port

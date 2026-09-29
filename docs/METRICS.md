@@ -162,6 +162,24 @@ Plus three health gauges:
 | `gpon_diag_up` | 1 when `/bin/diag` ran and at least one section parsed |
 | `gpon_diag_sections_parsed` / `_expected` | how much of the diag scrape was understood |
 
+From odi-oss `/var/run/odi-slot`, which its `slot-state.sh` writes at every
+boot from the U-Boot environment and `/proc/cmdline` (format: odi-oss
+`docs/TOOLS.md`, "Slot state"), so the exporter never reads the environment
+itself -- one small tmpfs file, no fork:
+
+| metric | meaning |
+|---|---|
+| `gpon_boot_slot{slot="0\|1"}` | always 1; `slot` is the firmware slot the running kernel was booted from |
+| `gpon_committed_slot{copy="primary\|fallback",slot="0\|1"}` | always 1; `slot` is what `sw_commit` names in that copy of the U-Boot environment (`primary` is the copy U-Boot boots from) |
+| `gpon_uncommitted` | 1 when either copy names another slot than the running one -- a trial boot, and the next reset boots the other slot; 0 when both name it |
+
+A value the file leaves empty (the running slot or the environment could not
+be read, or there is no valid fallback copy) omits that series; no file at
+all (an older image, the stock firmware) omits all three. The file is written
+at boot and again when `slot-state.sh` is run by hand, which is what to do
+after `nv commit` so `gpon_uncommitted` drops without a reboot.
+`OdiUncommittedImage` (docs/ALERTS.md) fires on it.
+
 `gpon_exporter_up` covers only the `/proc` half, so it stays 1 while every
 diag-derived metric is missing. The other two close that: `gpon_diag_up 0` is a
 diag that did not run, and `parsed < expected` is a scrape that ran and was

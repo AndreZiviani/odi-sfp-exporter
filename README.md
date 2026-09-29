@@ -22,6 +22,9 @@ gpon_onu_state 5
 gpon_alarm{alarm="los"} 0
 ```
 
+On odi-oss it also says which firmware slot is running and whether it is
+committed (`gpon_boot_slot`, `gpon_committed_slot`, `gpon_uncommitted`).
+
 See [docs/METRICS.md](docs/METRICS.md) for the full metric reference,
 [docs/ALERTS.md](docs/ALERTS.md) for ready-made Prometheus alerting rules
 ([`prometheus/alerts.yml`](prometheus/alerts.yml)), and

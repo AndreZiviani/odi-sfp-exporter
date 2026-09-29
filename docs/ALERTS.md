@@ -96,6 +96,7 @@ long before it crosses an absolute limit.
 | `OdiResetLoop` | critical | `gpon_boot_count` rose by 3 or more within an hour |
 | `OdiRebooted` | info | uptime under 10 min: any reboot, asked for or not |
 | `OdiMemoryLow` | warning | free + buffers + cached under 4 MiB for 10 min |
+| `OdiUncommittedImage` | warning | `gpon_uncommitted` is 1 for 30 min: a trial boot nobody committed, so the next reset boots the other slot |
 
 **Depends on `gpon_last_reset_reason` and `gpon_boot_count`**, which come
 from odi-oss `/proc/odi_ramlog_prev` and need both an exporter release that
@@ -108,6 +109,13 @@ unaffected. A power cycle clears the ramlog, so `gpon_boot_count` restarts at
 which resets the stick when `MemAvailable` stays under 2048 KB.
 `MemAvailable` is not exported; free + buffers + cached is the closest upper
 bound.
+
+`OdiUncommittedImage` is a reminder, not a fault: odi-oss never commits a
+trial by itself, so a trial that has been checked and is meant to stay is
+committed by hand on the stick (`nv commit <slot>`, then `slot-state.sh` to
+refresh the metric). It **depends on `gpon_uncommitted`**, which needs an
+exporter release that exports it and an odi-oss image that writes
+`/var/run/odi-slot`; without both it never fires.
 
 ### Config
 

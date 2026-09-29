@@ -57,7 +57,7 @@ endif
 
 LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
 
-HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h
+HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/slot_state.h
 
 # BUILD_ID is compiled in, but it is a make VARIABLE -- make cannot see it
 # change, so with the sources untouched it will not rebuild and the binary keeps
@@ -120,7 +120,7 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@for u in test_wrap test_resetinfo test_confighash; do \
+	@for u in test_wrap test_resetinfo test_confighash test_slot_state; do \
 		t=$$(mktemp); \
 		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
 		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \

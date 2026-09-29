@@ -18,6 +18,7 @@
 #include "wrap.h"
 #include "resetinfo.h"
 #include "confighash.h"
+#include "slot_state.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -1320,6 +1321,24 @@ static void metric_config(int fd)
 	}
 }
 
+/*
+ * Which slot is running and whether it is committed, from the file odi-oss
+ * writes at boot (src/slot_state.h has the format and the rendering). A tmpfs
+ * file of a few hundred bytes: the read cannot block, and the buffer bounds
+ * it. No file, nothing emitted.
+ */
+static void metric_slot_state(int fd)
+{
+	char st[512], out[1024];
+	unsigned long n;
+
+	if (read_file(SLOT_STATE_PATH, st, sizeof(st)) <= 0)
+		return;
+	n = slot_state_render(st, out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
+}
+
 static void emit_metrics(int fd)
 {
 	put_fd(fd, "# HELP gpon_exporter_up Always 1. Confirms the exporter ran.\n"
@@ -1328,6 +1347,7 @@ static void emit_metrics(int fd)
 
 	metric_build_info(fd);
 	metric_image_info(fd);
+	metric_slot_state(fd);
 	metric_uptime(fd);
 	metric_reset_info(fd);
 	metric_loadavg(fd);

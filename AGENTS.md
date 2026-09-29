@@ -25,9 +25,11 @@ other repo, not here.
     src/metricsd.c        the exporter: socket, accept loop, HTTP response
     src/metrics_body.h    the metrics themselves; every metric name lives here
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
+    src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
     src/start.S           _start and a 6-argument syscall stub for setsockopt
     test/test_wrap.c      host-native unit test for src/wrap.h (`make test`)
+    test/test_confighash.c  host-native unit test for src/confighash.h (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
     scripts/verify.sh     asserts ELF32 / big endian / MIPS / static / no INTERP
     scripts/toolchain-image.sh  prints (and pulls) the pinned toolchain image

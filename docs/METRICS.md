@@ -108,6 +108,51 @@ From `/proc`, which costs no fork at all:
 | `gpon_memory_bytes{kind="total\|free\|buffers\|cached"}` | `/proc/meminfo` |
 | `gpon_network_{receive,transmit}_{bytes,packets,errs,drop}_total{device="..."}` | `/proc/net/dev` |
 
+From the config partition, `/var/config` (jffs2, shared by both firmware
+slots, never written by a reflash), one `stat` per file per scrape and a fork
+of `/bin/md5sum` only when a file changed:
+
+| metric | source |
+|---|---|
+| `gpon_config_info{file,hash}` | always 1; `hash` is the first 12 hex digits of `md5sum /var/config/<file>` |
+| `gpon_config_mtime_seconds{file}` | `stat` of the same file: its mtime, by the stick clock when it was written |
+
+`file` is one of `lastgood.xml` (the service settings: VLAN, LOID, PLOAM
+password), `lastgood_hs.xml` (the hardware identity: GPON serial, MAC) and
+`odi.conf` (the odi-oss only keys, `SYSLOG_SERVER` and `NTP_SERVER`; absent
+until one is set). These are the provisioning identity: losing or silently
+changing one is an outage, and they survive everything except an explicit
+write or an erase of the partition. **Only a hash is exported**, never a
+value: the files hold the PLOAM and LOID passwords. Check a label by hand on
+the stick with `md5sum /var/config/lastgood.xml | cut -c1-12`.
+
+Alert on the **hash**, not the mtime. A config change shows up as a new
+`gpon_config_info` series for the same `file`, so two series for one file
+inside a window is a change:
+
+```promql
+count by (instance, file) (last_over_time(gpon_config_info[30m])) > 1
+```
+
+and a missing file as its mtime series going away while the exporter still
+answers (`gpon_config_mtime_seconds` comes from `stat` alone, so a failed
+`md5sum` does not look like a missing file):
+
+```promql
+gpon_exporter_up unless on (instance) gpon_config_mtime_seconds{file="lastgood_hs.xml"}
+```
+
+The mtime is by the stick clock, which starts at 1970 on every boot until NTP
+sets it (`NTP_SERVER`, odi-oss) -- so a write before NTP synced carries a
+1970 date. It says when, the hash says whether.
+
+The hash is cached against each file's inode, size, mtime and ctime, so
+`md5sum` runs once per boot and again only after a write. jffs2 keeps whole
+seconds; a write that kept all four the same would be missed until the next
+one that does not. `md5sum` is bounded by `MD5SUM_TIMEOUT_MS` (2 s); on a
+timeout or failure the hash is left out, the mtime is still exported, and the
+next scrape tries again.
+
 Plus three health gauges:
 
 | metric | meaning |

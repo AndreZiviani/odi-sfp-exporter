@@ -10,6 +10,18 @@
   bounded read on the first scrape that finds the file, kept for the boot;
   absent on a kernel without it. The parse is in `src/resetinfo.h`, tested on
   the host by `test/test_resetinfo.c` (`make test`).
+- Added `gpon_config_info{file,hash}` (always 1) and
+  `gpon_config_mtime_seconds{file}` for the three config-store files under
+  `/var/config` (`lastgood.xml`, `lastgood_hs.xml`, `odi.conf`), so an alert
+  can fire when the provisioning identity (GPON serial, PLOAM password, LOID,
+  VLAN) is lost or changes. `hash` is the first 12 hex digits of the file md5;
+  no value is ever exported. One `stat64` per file per scrape; `/bin/md5sum`
+  is forked only when a file inode, size, mtime or ctime changed, bounded by
+  `MD5SUM_TIMEOUT_MS` (2 s). The parse and the staleness test are in
+  `src/confighash.h`, tested on the host by `test/test_confighash.c`
+  (`make test`); `struct stat64` comes from the toolchain `<asm/stat.h>`
+  rather than a hand-copied o32 layout. See docs/METRICS.md for the alert
+  expressions.
 
 ## v1.1.2
 

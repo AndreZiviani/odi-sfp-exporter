@@ -17,6 +17,7 @@
 #include "syscall.h"
 #include "wrap.h"
 #include "resetinfo.h"
+#include "confighash.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -39,6 +40,13 @@
  */
 #define OMCICLI_TIMEOUT_MS 2000
 #define DIAG_TIMEOUT_MS    3000
+/*
+ * MD5SUM_TIMEOUT_MS: md5sum over the whole config partition is at most
+ * 240 KB of input, tens of milliseconds on this CPU, and it runs only when a
+ * file changed (metric_config), so 2 s is a bound for a wedged read of the
+ * flash, not for a slow hash.
+ */
+#define MD5SUM_TIMEOUT_MS  2000
 
 /*
  * Build identity, reported as gpon_exporter_build_info.
@@ -1212,6 +1220,106 @@ static void metric_reset_info(int fd)
 	put_fd(fd, "\"} 1\n");
 }
 
+/*
+ * The config store: one gpon_config_info{file,hash} per file present, and
+ * gpon_config_mtime_seconds{file}. src/confighash.h has which files and why.
+ *
+ * A hash, never the contents: lastgood*.xml hold the PLOAM password and the
+ * LOID password, and nothing of them goes into a label. Alert on the hash
+ * changing (a new series for the file), not on the mtime: the stock firmware
+ * and flash may rewrite a file with the same contents.
+ *
+ * Cheap on every scrape: one stat per file, no fork. md5sum (busybox, the
+ * native tool, which also lets anyone check the label by hand) runs only when
+ * a stat differs from the one the cached hash was taken under, so normally
+ * once per boot. A file that is absent emits nothing for it, which an alert
+ * can tell from a stick that was not scraped because gpon_exporter_up is
+ * still there. If md5sum fails or times out, the mtime is still emitted, the
+ * hash is not, and the next scrape tries again.
+ */
+#define MD5SUM_PATH "/bin/md5sum"
+
+static struct config_stamp config_cached[CONFIG_NFILES];
+static char config_hash[CONFIG_NFILES][CONFIG_HASH_LEN + 1];
+static unsigned config_hash_ok;		/* bit i: config_hash[i] is current */
+
+static void metric_config(int fd)
+{
+	struct config_stamp now[CONFIG_NFILES];
+	char paths[CONFIG_NFILES][32];
+	char *argv[CONFIG_NFILES + 2];
+	int f, argc = 1, stale = 0, any = 0;
+
+	argv[0] = "md5sum";
+	for (f = 0; f < CONFIG_NFILES; f++) {
+		struct stat64 st;
+		unsigned long k = 0, n = 0;
+		const char *d = CONFIG_DIR;
+
+		while (d[k] && n + 1 < sizeof(paths[f]))
+			paths[f][n++] = d[k++];
+		for (k = 0; config_names[f][k] && n + 1 < sizeof(paths[f]); k++)
+			paths[f][n++] = config_names[f][k];
+		paths[f][n] = 0;
+
+		now[f].present = stat_path(paths[f], &st) == 0;
+		now[f].ino = now[f].present ? st.st_ino : 0;
+		now[f].size = now[f].present ? st.st_size : 0;
+		now[f].mtime = now[f].present ? st.st_mtime : 0;
+		now[f].mtime_nsec = now[f].present ? st.st_mtime_nsec : 0;
+		now[f].ctime = now[f].present ? st.st_ctime : 0;
+		now[f].ctime_nsec = now[f].present ? st.st_ctime_nsec : 0;
+		if (!now[f].present)
+			continue;
+		any = 1;
+		argv[argc++] = paths[f];
+		if (!(config_hash_ok & (1u << f)) ||
+		    !config_stamp_eq(&now[f], &config_cached[f]))
+			stale = 1;
+	}
+	argv[argc] = 0;
+
+	if (!any)
+		return;
+
+	if (stale) {
+		char buf[512];
+		long got = run_to_buf(MD5SUM_PATH, argv, buf, sizeof(buf),
+				      MD5SUM_TIMEOUT_MS);
+
+		config_hash_ok = got > 0 ? config_parse_md5sum(buf, config_hash) : 0;
+		for (f = 0; f < CONFIG_NFILES; f++)
+			config_stamp_copy(&config_cached[f], &now[f]);
+	}
+
+	emit_header(fd, "gpon_config_info",
+		    "Always 1. hash is the first 12 hex digits of the md5 of one "
+		    "config-store file under /var/config; a new hash is a changed "
+		    "file.", "gauge");
+	for (f = 0; f < CONFIG_NFILES; f++) {
+		if (!now[f].present || !(config_hash_ok & (1u << f)))
+			continue;
+		put_fd(fd, "gpon_config_info{file=\"");
+		put_fd(fd, config_names[f]);
+		put_fd(fd, "\",hash=\"");
+		put_fd(fd, config_hash[f]);
+		put_fd(fd, "\"} 1\n");
+	}
+
+	emit_header(fd, "gpon_config_mtime_seconds",
+		    "Modification time of one config-store file under /var/config, "
+		    "by the stick clock at the time of the write.", "gauge");
+	for (f = 0; f < CONFIG_NFILES; f++) {
+		if (!now[f].present)
+			continue;
+		put_fd(fd, "gpon_config_mtime_seconds{file=\"");
+		put_fd(fd, config_names[f]);
+		put_fd(fd, "\"} ");
+		put_u32_fd(fd, (unsigned long)now[f].mtime);
+		put_fd(fd, "\n");
+	}
+}
+
 static void emit_metrics(int fd)
 {
 	put_fd(fd, "# HELP gpon_exporter_up Always 1. Confirms the exporter ran.\n"
@@ -1225,6 +1333,7 @@ static void emit_metrics(int fd)
 	metric_loadavg(fd);
 	metric_meminfo(fd);
 	metric_netdev(fd);
+	metric_config(fd);
 
 	/* Everything from /bin/diag, in a single fork. */
 	emit_diag_metrics(fd);

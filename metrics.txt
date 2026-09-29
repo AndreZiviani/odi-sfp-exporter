@@ -97,6 +97,16 @@ gpon_network_transmit_drop_total{device="eth0.3"} 0
 gpon_network_transmit_drop_total{device="nas0"} 0
 gpon_network_transmit_drop_total{device="pon0"} 0
 gpon_network_transmit_drop_total{device="br0"} 0
+# HELP gpon_config_info Always 1. hash is the first 12 hex digits of the md5 of one config-store file under /var/config; a new hash is a changed file.
+# TYPE gpon_config_info gauge
+gpon_config_info{file="lastgood.xml",hash="76ed442e5512"} 1
+gpon_config_info{file="lastgood_hs.xml",hash="cc450975a70c"} 1
+gpon_config_info{file="odi.conf",hash="6120e017f20e"} 1
+# HELP gpon_config_mtime_seconds Modification time of one config-store file under /var/config, by the stick clock at the time of the write.
+# TYPE gpon_config_mtime_seconds gauge
+gpon_config_mtime_seconds{file="lastgood.xml"} 1790641247
+gpon_config_mtime_seconds{file="lastgood_hs.xml"} 1790641247
+gpon_config_mtime_seconds{file="odi.conf"} 1790641248
 # HELP gpon_bias_current_ma Bias current of the GPON transceiver, in mA.
 # TYPE gpon_bias_current_ma gauge
 gpon_bias_current_ma 14.700000

@@ -48,6 +48,18 @@ struct pollfd {
 #define __NR_accept     4168
 #define __NR_setsockopt 4181
 
+/*
+ * stat64, for the config-store metrics. The struct comes from the target own
+ * kernel header rather than being written out here: MIPS o32 pads st_dev and
+ * st_rdev to four words each and keeps st_ino 64-bit, so a layout copied from
+ * x86 or ARM reads st_mtime from the wrong offset and gets a plausible number.
+ * <asm/stat.h> ships with the mips-linux-gnu cross toolchain and is plain
+ * UAPI, no libc. 4000 + 213 is __NR_stat64 in its <asm/unistd_o32.h>, and has
+ * been since 2.6, so the stock kernel and ours agree.
+ */
+#include <asm/stat.h>
+#define __NR_stat64 4213
+
 /* MIPS O_* are not the generic values either: O_CREAT is 0x100, not 0x40.
  * Verified against <fcntl.h> for mips-linux-gnu. */
 #define O_RDONLY 0
@@ -207,6 +219,12 @@ __attribute__((unused)) static long read_file(const char *path, char *buf, unsig
 	syscall3(__NR_close, fd, 0, 0);
 	buf[got] = 0;
 	return (long)got;
+}
+
+/* 0 on success, negative errno otherwise (a missing file is -ENOENT). */
+__attribute__((unused)) static long stat_path(const char *path, struct stat64 *st)
+{
+	return syscall3(__NR_stat64, (long)path, (long)st, 0);
 }
 
 /* Decimal formatting by hand: printf would drag in a libc we do not link, and

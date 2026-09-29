@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.2.0
+
 - Added `gpon_boot_count` (boots of the image since the last power cycle) and
   `gpon_last_reset_reason{reason,client}` (always 1: why the previous boot
   ended -- `wdt_client` with the client, `wdt_mem`, `wdt_userland`, `reboot`,

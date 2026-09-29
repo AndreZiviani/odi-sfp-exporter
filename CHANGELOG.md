@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added `gpon_boot_count` (boots of the image since the last power cycle) and
+  `gpon_last_reset_reason{reason,client}` (always 1: why the previous boot
+  ended -- `wdt_client` with the client, `wdt_mem`, `wdt_userland`, `reboot`,
+  `halt`, `poweroff`, `panic`, `oops`, `power` or `unknown`), from odi-oss's
+  `/proc/odi_ramlog_prev`, so an alert can fire on a watchdog reset. One
+  bounded read on the first scrape that finds the file, kept for the boot;
+  absent on a kernel without it. The parse is in `src/resetinfo.h`, tested on
+  the host by `test/test_resetinfo.c` (`make test`).
+
 ## v1.1.2
 
 - **Every child metricsd forks is now bounded.** Hardware trial (rc3, claro,

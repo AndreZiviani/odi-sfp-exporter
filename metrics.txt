@@ -4,6 +4,12 @@ gpon_exporter_up 1
 # HELP gpon_uptime_seconds Time since the stick booted.
 # TYPE gpon_uptime_seconds gauge
 gpon_uptime_seconds 9775.40
+# HELP gpon_boot_count Boots of this image since the last power cycle, this one included, from /proc/odi_ramlog_prev. Restarts at 1 after a power cycle.
+# TYPE gpon_boot_count gauge
+gpon_boot_count 31
+# HELP gpon_last_reset_reason Always 1. reason is why the previous boot ended, as the kernel recorded it: wdt_client (with client), wdt_mem, wdt_userland, reboot, halt, poweroff, panic, oops, power or unknown.
+# TYPE gpon_last_reset_reason gauge
+gpon_last_reset_reason{reason="wdt_client",client="omcid"} 1
 # HELP gpon_load1 Load average, from /proc/loadavg.
 # TYPE gpon_load1 gauge
 gpon_load1 2.12

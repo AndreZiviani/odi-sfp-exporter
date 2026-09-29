@@ -306,6 +306,21 @@ table in `src/metrics_body.h` so they cannot drift apart.
   now under `gpon_port_frames_total{size="1519_max"}`. **A dashboard or
   alert built on `gpon_port_receive_errors_total{kind="oversize"}` needs
   updating** to use the new metric/label.
+- **`gpon_port_receive_errors_total{port="3",kind="undersize"}` counts the
+  upstream OMCI replies, one each, and is not a fault.** Port 3 is the CPU.
+  An OMCI reply is a 48-byte baseline message with no Ethernet header, sent
+  unpadded because the GEM frame the OLT receives is exactly what the CPU
+  hands the switch minus the FCS: 48 + 4 = 52 bytes on the internal link,
+  under 64 with a good FCS, which is what RMON calls undersize. The switch
+  forwards it. The stock firmware sends the same 48 bytes and its kernel
+  counts the same thing (about 500 per boot on ISP1, the provisioning
+  replies). Measured on firmware v1.2.0: the counter rises at the OMCI reply
+  rate (0.18/s on ISP2, whose OLT polls; 0 on ISP1 after provisioning, whose
+  OLT does not), and those frames are in no other counter -- the port-3
+  frame-size histogram equals `receive_packets` plus `pause_frames`
+  exactly, and the 64-octet bucket equals `pause_frames` exactly, so no
+  other frame from the CPU is short. `OdiPortReceiveErrors` leaves port 3
+  undersize out; CRC, fragment and jabber errors on port 3 still count.
 - **`gpon_load*` is pinned and carries no signal.** Linux counts uninterruptible
   tasks in the load average, and this firmware keeps two kernel threads
   (`watchdog`, `led_swBlink`) permanently in D state. Load therefore sits at

@@ -46,7 +46,7 @@ including a healthy stick on which nothing may fire.
 | `OdiGponAlarm` | warning | any other `gpon_alarm` (`sf`, `sd`, `tx_too_long`, `tx_mismatch`) asserted for 5 min |
 | `OdiOmciNoServices` | critical | in O5 with `gpon_omci_services == 0` for 5 min: ranged but not provisioned, the wrong-identity case |
 | `OdiOmciServicesDropped` | warning | fewer services than the 6-hour maximum, but not zero, for 15 min |
-| `OdiPortReceiveErrors` | warning | more than 10 malformed frames (CRC, fragment, jabber, undersize) in 15 min on one port, for 15 min |
+| `OdiPortReceiveErrors` | warning | more than 10 malformed frames (CRC, fragment, jabber, undersize) in 15 min on one port, for 15 min; port 3 (CPU) undersize excluded: it is the OMCI replies (METRICS.md, "Known caveats") |
 
 The exporter has **no BIP, FEC or HEC counters**: the ONU MAC counters that
 carry them are read-and-clear, and FEC performance monitoring (OMCI ME 312)

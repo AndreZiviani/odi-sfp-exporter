@@ -170,7 +170,25 @@ tests:
           - exp_labels: {severity: warning, job: odi, instance: s1, port: "2"}
             exp_annotations:
               summary: "s1: receive errors on port 2"
-              description: "30 malformed frames (CRC, fragments, jabbers, undersize) in 15 minutes on port 2 (2 is the PON side, 0 the host side), sustained for 15 minutes."
+              description: "30 malformed frames (CRC, fragments, jabbers, undersize) in 15 minutes on port 2 (2 is the PON side, 0 the host side, 3 the CPU), sustained for 15 minutes."
+
+  # Port 3 undersize is the OMCI replies (0.18/s on a line whose OLT
+  # polls): no alert. A CRC error on port 3 still is one.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_port_receive_errors_total{job="odi",instance="s1",port="3",kind="undersize"}'
+        values: '0+11x60'
+      - series: 'gpon_port_receive_errors_total{job="odi",instance="s1",port="3",kind="crc_align"}'
+        values: '0x30 0+2x30'
+    alert_rule_test:
+      - {eval_time: 25m, alertname: OdiPortReceiveErrors, exp_alerts: []}
+      - eval_time: 60m
+        alertname: OdiPortReceiveErrors
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, port: "3"}
+            exp_annotations:
+              summary: "s1: receive errors on port 3"
+              description: "30 malformed frames (CRC, fragments, jabbers, undersize) in 15 minutes on port 3 (2 is the PON side, 0 the host side, 3 the CPU), sustained for 15 minutes."
 
   # Optics against absolute limits.
   - interval: 1m

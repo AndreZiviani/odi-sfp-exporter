@@ -71,6 +71,11 @@ jobs:
       - name: Test
         run: make test
 
+      # prometheus/alerts.yml: promtool check rules, then the unit tests in
+      # prometheus/alerts_test.yml, in the pinned prom/prometheus image.
+      - name: Alert rules
+        run: make rules
+
       # Asserts the shape the stick can actually load: ELF32, big-endian MIPS,
       # static, no INTERP, no shared deps. Any of these wrong and the binary is
       # silently unrunnable on the device.

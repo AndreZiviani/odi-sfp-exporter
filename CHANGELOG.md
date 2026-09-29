@@ -22,6 +22,18 @@
   (`make test`); `struct stat64` comes from the toolchain `<asm/stat.h>`
   rather than a hand-copied o32 layout. See docs/METRICS.md for the alert
   expressions.
+- Added Prometheus alerting rules, `prometheus/alerts.yml`, documented in
+  docs/ALERTS.md: exporter down or absent, diag and OMCI health, ONU not in
+  O5, GPON alarms, O5 with no OMCI services and services dropping, port
+  receive errors, rx and tx power against the G.984.2 class B+ limits, rx
+  power and laser bias current against the stick own 7-day mean (the
+  ageing-laser warning), module temperature and supply voltage, watchdog
+  resets and reset loops, low memory, and config-store changes and loss.
+  The reset rules need `gpon_last_reset_reason`/`gpon_boot_count` and the
+  config rules `gpon_config_info`/`gpon_config_mtime_seconds`; without those
+  metrics they never fire. `make rules` runs `promtool check rules` and the
+  unit tests in `prometheus/alerts_test.yml` in a digest-pinned
+  `prom/prometheus` image; CI runs it on every push and PR.
 
 ## v1.1.2
 

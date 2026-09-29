@@ -1,0 +1,381 @@
+# Prometheus alerting rules for odi-sfp-exporter (metricsd).
+#
+# Load with `rule_files: [alerts.yml]` in prometheus.yml. docs/ALERTS.md has
+# what each alert means, the thresholds and why, and the metrics each one
+# depends on. `make rules` checks this file and runs prometheus/alerts_test.yml
+# with promtool, in CI as well.
+#
+# No rule names a job: every expression joins on the job and instance of
+# series metricsd itself exports, so the rules apply to whatever scrape job
+# the sticks are in and to nothing else.
+#
+# Severity: critical means the service is down or about to be; warning means
+# it still works and something is degrading; info is worth seeing, not worth
+# waking up for.
+
+groups:
+  - name: odi-exporter
+    rules:
+      # A target that exported gpon_* in the last day and now fails its
+      # scrape. up is Prometheus own series; joining it on gpon_exporter_up
+      # limits the rule to sticks.
+      - alert: OdiExporterDown
+        expr: |
+          up == 0
+          and on (job, instance) max_over_time(gpon_exporter_up[1d])
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: exporter not answering"
+          description: >-
+            The scrape of {{ $labels.instance }} has failed for 5 minutes.
+            Either the stick is down or unreachable, or metricsd is not
+            running (it respawns under init on odi-oss, so a stuck one is a
+            bug worth a look).
+
+      # The target went away from service discovery, or stopped exporting
+      # gpon_exporter_up while its scrape still succeeds -- silence that
+      # looks like health on a dashboard.
+      - alert: OdiExporterAbsent
+        expr: |
+          max_over_time(gpon_exporter_up[1d])
+          unless on (job, instance) gpon_exporter_up
+          unless on (job, instance) (up == 0)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: no exporter data for 10 minutes"
+          description: >-
+            {{ $labels.instance }} exported gpon_exporter_up within the last
+            day and has not for 10 minutes, and no failing scrape explains
+            it: the target was removed from the scrape config, or relabelling
+            changed its labels.
+
+      - alert: OdiDiagDown
+        expr: gpon_diag_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: diag is not answering"
+          description: >-
+            /bin/diag did not run or none of its output parsed for 5 minutes,
+            so every optics, ONU state, alarm and port counter metric is
+            missing. The /proc metrics still report.
+
+      - alert: OdiDiagTruncated
+        expr: gpon_diag_sections_parsed < gpon_diag_sections_expected
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: partial diag scrape"
+          description: >-
+            Only {{ $value }} diag sections parsed. The tail sections, the
+            port counters among them, are silently missing.
+
+      - alert: OdiOmciDown
+        expr: gpon_omci_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: OMCI daemon not answering"
+          description: >-
+            omcicli got no answer from the OMCI daemon within 2 s for 5
+            minutes. Service may still be forwarding, but the ONU cannot
+            follow OLT changes, and on odi-oss the watchdog resets a stuck
+            omcid within its 60 s deadline -- so this lasting means the
+            daemon answers the watchdog and not the command queue.
+
+  - name: odi-gpon
+    rules:
+      - alert: OdiOnuNotOperational
+        expr: gpon_onu_state != 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: ONU in O{{ $value }}, not O5"
+          description: >-
+            The ONU has not been in O5 (operation) for 2 minutes: the OLT
+            has not ranged it or has deactivated it. No service.
+
+      - alert: OdiGponAlarmCritical
+        expr: gpon_alarm{alarm=~"los|lof|lom"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: GPON alarm {{ $labels.alarm }}"
+          description: >-
+            {{ $labels.alarm }} has been asserted for a minute: loss of
+            signal, frame or PLOAM message. The downstream is gone or
+            unusable.
+
+      - alert: OdiGponAlarm
+        expr: gpon_alarm{alarm!~"los|lof|lom"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: GPON alarm {{ $labels.alarm }}"
+          description: >-
+            {{ $labels.alarm }} has been asserted for 5 minutes. sf and sd
+            are the OLT-side signal fail and signal degrade thresholds on
+            the downstream bit error rate -- the early warning for errors,
+            since the exporter has no BIP or FEC counters.
+
+      # O5 and no service: the case every other metric looks healthy in
+      # (a wrong serial, PLOAM password or LOID accepted by the OLT).
+      - alert: OdiOmciNoServices
+        expr: |
+          gpon_omci_services == 0
+          and on (job, instance) gpon_onu_state == 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: in O5 with no OMCI services"
+          description: >-
+            The ONU is ranged but the OLT has provisioned no service for 5
+            minutes. Usually an identity the OLT accepts for ranging but not
+            for service: check the serial, PLOAM password, LOID and VLAN
+            against the last config backup (gpon_config_info).
+
+      - alert: OdiOmciServicesDropped
+        expr: |
+          gpon_omci_services > 0
+          and gpon_omci_services < max_over_time(gpon_omci_services[6h])
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: fewer OMCI services than earlier"
+          description: >-
+            {{ $value }} services now, fewer than at some point in the last
+            6 hours. The OLT removed one (a VoIP or IPTV service, often), or
+            a reprovision did not complete.
+
+      # Port 2 is the PON side, port 0 the host SerDes side. Any increase of
+      # these on a healthy line is unusual; 10 in 15 minutes rules out one
+      # stray frame.
+      - alert: OdiPortReceiveErrors
+        expr: |
+          sum by (job, instance, port) (increase(gpon_port_receive_errors_total[15m])) > 10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: receive errors on port {{ $labels.port }}"
+          description: >-
+            {{ $value | printf "%.0f" }} malformed frames (CRC, fragments,
+            jabbers, undersize) in 15 minutes on port {{ $labels.port }}
+            (2 is the PON side, 0 the host side), sustained for 15 minutes.
+
+  - name: odi-optics
+    rules:
+      # G.984.2 class B+ ONU receiver: sensitivity -27 dBm, overload -8 dBm.
+      - alert: OdiRxPowerLow
+        expr: gpon_rx_power_dbm < -25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: rx power {{ $value | printf \"%.2f\" }} dBm"
+          description: >-
+            Received optical power is within 2 dB of the class B+ receiver
+            sensitivity (-27 dBm). Clean the connectors, check the drop
+            fibre for bends.
+
+      - alert: OdiRxPowerCritical
+        expr: gpon_rx_power_dbm < -27 or gpon_rx_power_dbm > -8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: rx power {{ $value | printf \"%.2f\" }} dBm out of range"
+          description: >-
+            Received optical power is outside the class B+ receiver range
+            (-27 to -8 dBm). Expect errors or loss of signal.
+
+      # A drop against the stick own week, which catches a degrading
+      # connector or fibre long before the absolute threshold.
+      - alert: OdiRxPowerDropped
+        expr: |
+          avg_over_time(gpon_rx_power_dbm[1h])
+          < avg_over_time(gpon_rx_power_dbm[7d]) - 2
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: rx power 2 dB below its 7-day average"
+          description: >-
+            The hourly mean of received power has been more than 2 dB under
+            the 7-day mean for an hour. Something in the optical path got
+            worse: a connector, a splice, a bend.
+
+      # G.984.2 class B+ ONU transmitter: +0.5 to +5 dBm launch power.
+      - alert: OdiTxPowerOutOfRange
+        expr: gpon_tx_power_dbm < 0.5 or gpon_tx_power_dbm > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: tx power {{ $value | printf \"%.2f\" }} dBm"
+          description: >-
+            Launch power is outside the class B+ range (+0.5 to +5 dBm). Low
+            launch power with a rising bias current is an ageing laser.
+
+      # The laser runs under automatic power control, so as it ages the
+      # driver pushes more bias current for the same light. A sustained rise
+      # against the stick own week is the early sign; a fast one is a laser
+      # near the end. Bias also follows temperature, hence the hour-long
+      # means and the 6 h hold, which ride out a daily heat cycle.
+      - alert: OdiLaserBiasRising
+        expr: |
+          avg_over_time(gpon_bias_current_ma[1h])
+          > 1.25 * avg_over_time(gpon_bias_current_ma[7d])
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: laser bias 25% above its 7-day average"
+          description: >-
+            The hourly mean of the laser bias current has been more than 25%
+            above its 7-day mean for 6 hours. The laser is ageing or its
+            cooling got worse; compare with gpon_temperature_celsius and
+            gpon_tx_power_dbm, and plan a replacement stick.
+
+      # SFP modules are specified for 0 to 70 C case temperature
+      # (commercial range); these sticks idle around 35 to 50 C.
+      - alert: OdiModuleTemperatureHigh
+        expr: gpon_temperature_celsius > 70
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: module at {{ $value | printf \"%.1f\" }} C"
+          description: >-
+            The transceiver has been above the 70 C commercial limit for 10
+            minutes. Lasers age fast when hot; check the airflow around the
+            host port.
+
+      - alert: OdiModuleTemperatureCritical
+        expr: gpon_temperature_celsius > 80
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: module at {{ $value | printf \"%.1f\" }} C"
+          description: >-
+            The transceiver has been above 80 C for 5 minutes.
+
+      # SFF-8472 modules run from 3.3 V +-5%.
+      - alert: OdiSupplyVoltageOutOfRange
+        expr: gpon_voltage_volts < 3.135 or gpon_voltage_volts > 3.465
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: supply {{ $value | printf \"%.3f\" }} V"
+          description: >-
+            The 3.3 V supply from the host port is outside +-5%.
+
+  - name: odi-system
+    rules:
+      # gpon_last_reset_reason and gpon_boot_count come from odi-oss
+      # /proc/odi_ramlog_prev (exporter with the reset-reason change, image
+      # with the ramlog). Without them these two rules never fire.
+      - alert: OdiWatchdogReset
+        expr: |
+          gpon_last_reset_reason{reason=~"wdt_.*|panic|oops"} == 1
+          and on (job, instance) gpon_uptime_seconds < 3600
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: rebooted by {{ $labels.reason }} {{ $labels.client }}"
+          description: >-
+            The previous boot ended in {{ $labels.reason }}
+            {{ with $labels.client }}(client {{ . }}){{ end }}, not in a
+            reboot someone asked for. Read /proc/odi_ramlog_prev on the stick
+            (or the diagnostics bundle) before the next reset replaces it.
+            Clears an hour after the boot.
+
+      # gpon_boot_count counts boots since the last power cycle; three more
+      # in an hour is a reset loop.
+      - alert: OdiResetLoop
+        expr: |
+          max_over_time(gpon_boot_count[1h]) - min_over_time(gpon_boot_count[1h]) >= 3
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $value }} resets in an hour"
+          description: >-
+            The stick keeps resetting. Each boot is 75 to 80 s off the line.
+            gpon_last_reset_reason says what fired.
+
+      - alert: OdiRebooted
+        expr: gpon_uptime_seconds < 600
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $labels.instance }}: booted {{ $value | humanizeDuration }} ago"
+          description: >-
+            Any reboot, including a power cycle and one asked for. Clears 10
+            minutes after the boot.
+
+      # The kernel watchdog resets the stick when MemAvailable stays under
+      # 2048 KB. MemAvailable is not exported; free + buffers + cached is
+      # the closest upper bound, so 4 MiB leaves the margin.
+      - alert: OdiMemoryLow
+        expr: |
+          sum by (job, instance) (gpon_memory_bytes{kind=~"free|buffers|cached"}) < 4194304
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $value | humanize1024 }}B reclaimable"
+          description: >-
+            Free plus buffers plus cached memory has been under 4 MiB for 10
+            minutes. The kernel watchdog resets the stick at 2 MiB available.
+
+  - name: odi-config
+    rules:
+      # A new hash is a new series for the same file, so two series for one
+      # file inside the window is a change. Fires for a deliberate change
+      # too: that is the point, since the question is whether anyone meant
+      # it.
+      - alert: OdiConfigChanged
+        expr: |
+          count by (job, instance, file) (last_over_time(gpon_config_info[30m])) > 1
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.file }} changed"
+          description: >-
+            {{ $labels.file }} on the config partition has a new hash. If
+            nobody saved or restored settings, compare with the last backup
+            (odi-oss tools/config-backup.sh keeps one per change). Clears 30
+            minutes after the change.
+
+      # Seen within the last day, gone now while the exporter still answers.
+      # From the mtime series, which is a stat alone: a failed md5sum does
+      # not look like a missing file.
+      - alert: OdiConfigFileMissing
+        expr: |
+          max_over_time(gpon_config_mtime_seconds{file=~"lastgood(_hs)?\\.xml"}[1d])
+          unless on (job, instance, file) gpon_config_mtime_seconds
+          and on (job, instance) gpon_exporter_up
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.file }} is gone"
+          description: >-
+            {{ $labels.file }} is no longer on the config partition. It holds
+            the provisioning identity (lastgood_hs.xml: GPON serial and MAC;
+            lastgood.xml: PLOAM password, LOID, VLAN). Do not reboot: restore
+            from the last backup first.

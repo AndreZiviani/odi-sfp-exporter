@@ -1,0 +1,4 @@
+state 2 (O2)
+onu_id -1
+alloc_ids 0
+ploam ds_rx 0 us_tx 0

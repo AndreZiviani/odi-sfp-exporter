@@ -25,6 +25,9 @@ other repo, not here.
     src/metricsd.c        the exporter: socket, accept loop, HTTP response
     src/metrics_body.h    the metrics themselves; every metric name lives here
     src/slot_state.h      the boot-slot metrics from odi-oss /var/run/odi-slot; pure, host-tested
+    src/metrics_body.h    the metrics themselves; every metric name lives here,
+                          except the gpon_provision_* families
+    src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
@@ -33,6 +36,7 @@ other repo, not here.
     test/test_confighash.c  host-native unit test for src/confighash.h (`make test`)
     test/test_slot_state.c host-native unit test for src/slot_state.h (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
+    test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens
     scripts/verify.sh     asserts ELF32 / big endian / MIPS / static / no INTERP
     scripts/toolchain-image.sh  prints (and pulls) the pinned toolchain image
     scripts/deploy.sh     push a file to the stick over netcat
@@ -63,8 +67,8 @@ other repo, not here.
     make clean
 
 `make test` is host-native (plain `cc`, no Docker, no qemu-user) — it only
-covers `src/wrap.h` and the `mib_*` tables in `src/metrics_body.h`, which have
-no MIPS-specific code. Everything else is still gated by `make all` (or
+covers `src/wrap.h`, `src/provision.h` and the `mib_*` tables in
+`src/metrics_body.h`, which have no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,
 not only on tags.
 

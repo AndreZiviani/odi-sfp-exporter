@@ -152,6 +152,39 @@ seconds; a write that kept all four the same would be missed until the next
 one that does not. `md5sum` is bounded by `MD5SUM_TIMEOUT_MS` (2 s); on a
 timeout or failure the hash is left out, the mtime is still exported, and the
 next scrape tries again.
+From omcid, the odi-oss OMCI daemon, through `/bin/omcicli` (one short fork
+each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon`:
+
+| metric | source |
+|---|---|
+| `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time; 0 is a stuck omcid, and the families below are then stale or absent |
+| `gpon_omci_services` | `omcicli dump srvflow` -- bridge connections installed; 0 at O5 is synced but not provisioned |
+| `gpon_provision_tconts` | `/proc/odi_gpon`, `alloc_ids` -- T-CONTs the OLT assigned by PLOAM (Assign_Alloc-ID) |
+| `gpon_provision_tcont_info{alloc_id}` | same, 1 per Alloc-ID |
+| `gpon_provision_gem_ports` | `omcicli provision` -- GEM port network CTPs the OLT created |
+| `gpon_provision_gem_port_info{gem_port,direction="upstream\|downstream\|bidirectional"}` | same, 1 per GEM port |
+| `gpon_provision_vlan_info{vlan,source="vlan_filter\|ext_vlan_filter\|ext_vlan_treatment"}` | same -- each VID the OLT provisioned, once per place: the VLAN tagging filter (ME 84), or the extended VLAN tagging table (ME 171), where it is matched or set |
+| `gpon_provision_traffic_descriptors` | same -- traffic descriptors (ME 280) the OLT created |
+| `gpon_provision_traffic_descriptor_{cir,pir}_bytes_per_second{descriptor}` | same -- each descriptor's committed and peak rate, bytes/s (G.988) |
+| `gpon_provision_mib_entities` | same -- entities the OLT created or wrote |
+| `gpon_provision_mib_data_sync` | same -- the MIB data sync counter, 0 after a MIB reset |
+
+The `gpon_provision_*` families say what the ISP provisioned, so a plan change
+is a label or a value that changed on a graph, not a guess: a new speed tier is
+a new `_pir_bytes_per_second`, a moved service VLAN a new `vlan` label, another
+T-CONT a new `alloc_id`. Cardinality is the provisioning itself -- a handful
+of each per stick, stable until the ISP changes the service:
+
+```promql
+changes(gpon_provision_mib_data_sync[1d]) > 0          # the OLT wrote something
+count by (vlan) (gpon_provision_vlan_info)             # which VLANs, over time
+```
+
+Each source is optional. A stick on a stock kernel has no `alloc_ids` line,
+one on the vendor `omci_app` has no `provision` command, and a stuck omcid
+(`gpon_omci_up 0`) is not asked a second time; each case leaves those
+families absent, never zero. The parsing is `src/provision.h`, tested
+natively against fixtures and goldens (`test/test_provision.c`).
 
 Plus three health gauges:
 

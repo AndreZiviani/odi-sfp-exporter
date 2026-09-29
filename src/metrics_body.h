@@ -19,6 +19,7 @@
 #include "resetinfo.h"
 #include "confighash.h"
 #include "slot_state.h"
+#include "provision.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -975,7 +976,9 @@ static void emit_omci_up(int fd, int up)
 	put_fd(fd, up ? "1\n" : "0\n");
 }
 
-static void emit_omci_metrics(int fd)
+/* Returns 1 when omcid answered, so the provisioning read below is skipped
+ * against a stuck one rather than spending a second OMCICLI_TIMEOUT_MS. */
+static int emit_omci_metrics(int fd)
 {
 	static char *const argv[] = { "omcicli", "dump", "srvflow", 0 };
 	char buf[8192];
@@ -991,7 +994,7 @@ static void emit_omci_metrics(int fd)
 		 * IS down, and must say so rather than go quiet. */
 		if (n == -2)
 			emit_omci_up(fd, 0);
-		return;
+		return 0;
 	}
 	buf[n] = 0;
 	for (i = 0; buf[i]; i++)
@@ -1007,6 +1010,44 @@ static void emit_omci_metrics(int fd)
 	put_fd(fd, "gpon_omci_services ");
 	put_u32_fd(fd, used);
 	put_fd(fd, "\n");
+	return 1;
+}
+
+/*
+ * What the OLT provisioned: gpon_provision_* (src/provision.h has the metrics
+ * and both sources). The T-CONTs come from /proc/odi_gpon, a read; the rest
+ * from `omcicli provision`, one more short fork under the same bound as
+ * `dump srvflow`, and only when that one answered.
+ */
+#define ODI_GPON_PROC "/proc/odi_gpon"
+
+static void prov_put_fd(void *ctx, const char *s, unsigned long n)
+{
+	write_all(*(int *)ctx, s, n);
+}
+
+static void emit_provision_metrics(int fd, int omci_ok)
+{
+	static char *const argv[] = { "omcicli", "provision", 0 };
+	/* /proc/odi_gpon is about 2 KB (its PLOAM ring is most of it); the
+	 * provision answer of the ISP1 session is 0.6 KB. */
+	char buf[8192];
+	struct prov_out o;
+	long n;
+
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	n = read_file(ODI_GPON_PROC, buf, sizeof(buf));
+	if (n > 0)
+		prov_emit_tconts(&o, buf);
+	if (!omci_ok)
+		return;
+	n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1,
+		       OMCICLI_TIMEOUT_MS);
+	if (n <= 0)
+		return;
+	buf[n] = 0;
+	prov_emit_omci(&o, buf);
 }
 
 static void emit_diag_metrics(int fd)
@@ -1358,8 +1399,9 @@ static void emit_metrics(int fd)
 	/* Everything from /bin/diag, in a single fork. */
 	emit_diag_metrics(fd);
 
-	/* And one more fork for the OMCI service table. */
-	emit_omci_metrics(fd);
+	/* And one more fork for the OMCI service table, and one for what the
+	 * OLT provisioned. */
+	emit_provision_metrics(fd, emit_omci_metrics(fd));
 
 	/*
 	 * NOT exporting `gpon show counter global ds-eth`. Four consecutive reads

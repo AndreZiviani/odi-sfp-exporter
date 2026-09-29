@@ -1,0 +1,9 @@
+state 5 (O5)
+onu_id 3
+sn 0000000000000000
+eqd multiframe 0 inframe 0
+ploam ds_rx 120 us_tx 40
+alloc_ids 2 282 794
+ploam_type ds 0x01 3
+rei_count 0
+to1_expiries 0

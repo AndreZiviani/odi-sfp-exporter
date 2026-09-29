@@ -39,6 +39,9 @@ other repo, not here.
     docs/BUILDING.md      the toolchain image: pulling, building it locally, release targets
     docs/DESIGN.md        why it is built this way, implementation notes, install, porting
     docs/METRICS.md       full metric reference and caveats
+    docs/ALERTS.md        the alerting rules: what each alert means, thresholds, dependencies
+    prometheus/alerts.yml       Prometheus alerting rules on these metrics
+    prometheus/alerts_test.yml  promtool unit tests for them (`make rules`)
     Makefile               every target below; re-enters itself with IN_CONTAINER=1
     .github/workflows/release.yml   build + gate on every push, publish on v* tags
 
@@ -51,6 +54,7 @@ other repo, not here.
     make run ARGS=... # run a built binary under qemu-user (proves logic/syscalls,
                        # NOT instruction legality -- qemu emulates full MIPS32)
     make test         # host-native: src/wrap.h unit test + mib_* table fixture check
+    make rules        # promtool check + unit tests of prometheus/alerts.yml (Docker)
     make all          # httpd + verify + isa + test -- what you almost always want
     make release      # httpd + verify + isa + sums -- exactly what CI runs on a tag
     make sums         # SHA256SUMS over build/metricsd

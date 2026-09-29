@@ -90,7 +90,7 @@ else
 
 RUN   := docker run --rm -v "$(CURDIR)":/src -w /src $(IMAGE)
 
-.PHONY: all httpd image verify isa test run deploy shell clean release sums
+.PHONY: all httpd image verify isa test rules run deploy shell clean release sums
 
 # What you almost always want: the exporter, checked.
 all: httpd verify isa test
@@ -128,6 +128,17 @@ test:
 		[ $$rc -eq 0 ] || exit $$rc; \
 	done
 	sh test/test_metrics.sh
+
+# The alerting rules: `promtool check rules` on prometheus/alerts.yml, then
+# its unit tests, prometheus/alerts_test.yml. Host-side like `test`, but in
+# the upstream Prometheus image rather than the toolchain one, pinned by
+# digest for the same reason the toolchain is: a newer promtool may parse or
+# evaluate differently, and that should be a visible change here.
+PROMETHEUS_IMAGE ?= prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+PROMTOOL := docker run --rm -v "$(CURDIR)/prometheus":/w -w /w --entrypoint promtool $(PROMETHEUS_IMAGE)
+rules:
+	$(PROMTOOL) check rules alerts.yml
+	$(PROMTOOL) test rules alerts_test.yml
 
 verify: image
 	$(RUN) scripts/verify.sh $(BIN)

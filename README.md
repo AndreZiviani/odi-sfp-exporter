@@ -22,7 +22,9 @@ gpon_onu_state 5
 gpon_alarm{alarm="los"} 0
 ```
 
-See [docs/METRICS.md](docs/METRICS.md) for the full metric reference and
+See [docs/METRICS.md](docs/METRICS.md) for the full metric reference,
+[docs/ALERTS.md](docs/ALERTS.md) for ready-made Prometheus alerting rules
+([`prometheus/alerts.yml`](prometheus/alerts.yml)), and
 [docs/DESIGN.md](docs/DESIGN.md) for why it is built this way.
 
 Part of [odi-oss](https://github.com/AndreZiviani/odi-oss), the open firmware

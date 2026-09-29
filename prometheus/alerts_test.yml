@@ -1,0 +1,362 @@
+# promtool unit tests for alerts.yml: `make rules` runs them.
+#
+# Each case feeds a synthetic series set and asserts which alerts are firing
+# at a given time. An empty exp_alerts asserts that nothing fires, which is
+# how the healthy-stick cases guard against a rule that fires on every stick.
+
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # A healthy stick: O5, services up, optics in range, nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="odi",instance="s1"}'
+        values: '1x60'
+      - series: 'gpon_exporter_up{job="odi",instance="s1"}'
+        values: '1x60'
+      - series: 'gpon_onu_state{job="odi",instance="s1"}'
+        values: '5x60'
+      - series: 'gpon_omci_up{job="odi",instance="s1"}'
+        values: '1x60'
+      - series: 'gpon_omci_services{job="odi",instance="s1"}'
+        values: '6x60'
+      - series: 'gpon_rx_power_dbm{job="odi",instance="s1"}'
+        values: '-20x60'
+      - series: 'gpon_tx_power_dbm{job="odi",instance="s1"}'
+        values: '2.4x60'
+      - series: 'gpon_bias_current_ma{job="odi",instance="s1"}'
+        values: '13x60'
+      - series: 'gpon_temperature_celsius{job="odi",instance="s1"}'
+        values: '40x60'
+      - series: 'gpon_voltage_volts{job="odi",instance="s1"}'
+        values: '3.3x60'
+      - series: 'gpon_uptime_seconds{job="odi",instance="s1"}'
+        values: '9000+60x60'
+      - series: 'gpon_config_info{job="odi",instance="s1",file="lastgood.xml",hash="76ed442e5512"}'
+        values: '1x60'
+      - series: 'gpon_config_mtime_seconds{job="odi",instance="s1",file="lastgood.xml"}'
+        values: '1790641247x60'
+      - series: 'gpon_alarm{job="odi",instance="s1",alarm="los"}'
+        values: '0x60'
+    alert_rule_test:
+      - {eval_time: 60m, alertname: OdiExporterDown, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiExporterAbsent, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiOnuNotOperational, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiGponAlarmCritical, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiOmciNoServices, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiRxPowerLow, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiTxPowerOutOfRange, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiRebooted, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiConfigChanged, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiConfigFileMissing, exp_alerts: []}
+
+  # The exporter stops answering: up goes to 0 and every gpon_* series
+  # goes stale. Down fires, Absent must not (the failing scrape explains it).
+  - interval: 1m
+    input_series:
+      - series: 'up{job="odi",instance="s1"}'
+        values: '1x30 0x30'
+      - series: 'gpon_exporter_up{job="odi",instance="s1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: OdiExporterDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: exporter not answering"
+              description: >-
+                The scrape of s1 has failed for 5 minutes. Either the stick
+                is down or unreachable, or metricsd is not running (it
+                respawns under init on odi-oss, so a stuck one is a bug
+                worth a look).
+      - {eval_time: 45m, alertname: OdiExporterAbsent, exp_alerts: []}
+
+  # The target vanishes from service discovery: no up, no gpon_*.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="odi",instance="s1"}'
+        values: '1x30'
+      - series: 'gpon_exporter_up{job="odi",instance="s1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: OdiExporterAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: no exporter data for 10 minutes"
+              description: "s1 exported gpon_exporter_up within the last day and has not for 10 minutes, and no failing scrape explains it: the target was removed from the scrape config, or relabelling changed its labels."
+      - {eval_time: 50m, alertname: OdiExporterDown, exp_alerts: []}
+
+  # Ranged but not provisioned, then the ONU drops out of O5.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_onu_state{job="odi",instance="s1"}'
+        values: '5x20 1x20'
+      - series: 'gpon_omci_services{job="odi",instance="s1"}'
+        values: '0x40'
+      - series: 'gpon_alarm{job="odi",instance="s1",alarm="los"}'
+        values: '0x20 1x20'
+      - series: 'gpon_alarm{job="odi",instance="s1",alarm="sd"}'
+        values: '0x5 1x35'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: OdiOmciNoServices
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: in O5 with no OMCI services"
+              description: "The ONU is ranged but the OLT has provisioned no service for 5 minutes. Usually an identity the OLT accepts for ranging but not for service: check the serial, PLOAM password, LOID and VLAN against the last config backup (gpon_config_info)."
+      - {eval_time: 15m, alertname: OdiOnuNotOperational, exp_alerts: []}
+      - eval_time: 15m
+        alertname: OdiGponAlarm
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, alarm: sd}
+            exp_annotations:
+              summary: "s1: GPON alarm sd"
+              description: "sd has been asserted for 5 minutes. sf and sd are the OLT-side signal fail and signal degrade thresholds on the downstream bit error rate -- the early warning for errors, since the exporter has no BIP or FEC counters."
+      - eval_time: 30m
+        alertname: OdiOnuNotOperational
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: ONU in O1, not O5"
+              description: >-
+                The ONU has not been in O5 (operation) for 2 minutes: the
+                OLT has not ranged it or has deactivated it. No service.
+      - eval_time: 30m
+        alertname: OdiGponAlarmCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1, alarm: los}
+            exp_annotations:
+              summary: "s1: GPON alarm los"
+              description: "los has been asserted for a minute: loss of signal, frame or PLOAM message. The downstream is gone or unusable."
+      # Not in O5 any more, so no-services is the ONU state alert job now.
+      - {eval_time: 30m, alertname: OdiOmciNoServices, exp_alerts: []}
+
+  # One service of six goes away.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_omci_services{job="odi",instance="s1"}'
+        values: '6x60 5x60'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: OdiOmciServicesDropped
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: fewer OMCI services than earlier"
+              description: "5 services now, fewer than at some point in the last 6 hours. The OLT removed one (a VoIP or IPTV service, often), or a reprovision did not complete."
+      - {eval_time: 50m, alertname: OdiOmciServicesDropped, exp_alerts: []}
+
+  # CRC errors on the PON side.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_port_receive_errors_total{job="odi",instance="s1",port="2",kind="crc_align"}'
+        values: '0+2x60'
+      - series: 'gpon_port_receive_errors_total{job="odi",instance="s1",port="0",kind="crc_align"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: OdiPortReceiveErrors
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, port: "2"}
+            exp_annotations:
+              summary: "s1: receive errors on port 2"
+              description: "30 malformed frames (CRC, fragments, jabbers, undersize) in 15 minutes on port 2 (2 is the PON side, 0 the host side), sustained for 15 minutes."
+
+  # Optics against absolute limits.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_rx_power_dbm{job="odi",instance="s1"}'
+        values: '-26x30 -28x30'
+      - series: 'gpon_tx_power_dbm{job="odi",instance="s1"}'
+        values: '0.2x60'
+      - series: 'gpon_temperature_celsius{job="odi",instance="s1"}'
+        values: '75x30 85x30'
+      - series: 'gpon_voltage_volts{job="odi",instance="s1"}'
+        values: '3.1x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OdiRxPowerLow
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: rx power -26.00 dBm"
+              description: >-
+                Received optical power is within 2 dB of the class B+
+                receiver sensitivity (-27 dBm). Clean the connectors, check
+                the drop fibre for bends.
+      - {eval_time: 20m, alertname: OdiRxPowerCritical, exp_alerts: []}
+      - eval_time: 50m
+        alertname: OdiRxPowerCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: rx power -28.00 dBm out of range"
+              description: "Received optical power is outside the class B+ receiver range (-27 to -8 dBm). Expect errors or loss of signal."
+      - eval_time: 20m
+        alertname: OdiTxPowerOutOfRange
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: tx power 0.20 dBm"
+              description: "Launch power is outside the class B+ range (+0.5 to +5 dBm). Low launch power with a rising bias current is an ageing laser."
+      - eval_time: 20m
+        alertname: OdiModuleTemperatureHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: module at 75.0 C"
+              description: "The transceiver has been above the 70 C commercial limit for 10 minutes. Lasers age fast when hot; check the airflow around the host port."
+      - {eval_time: 20m, alertname: OdiModuleTemperatureCritical, exp_alerts: []}
+      - eval_time: 50m
+        alertname: OdiModuleTemperatureCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: module at 85.0 C"
+              description: "The transceiver has been above 80 C for 5 minutes."
+      - eval_time: 20m
+        alertname: OdiSupplyVoltageOutOfRange
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: supply 3.100 V"
+              description: "The 3.3 V supply from the host port is outside +-5%."
+
+  # A week of steady optics, then the bias climbs 30% and rx power falls
+  # 3 dB. 10 minute samples keep a week of input short.
+  - interval: 10m
+    input_series:
+      - series: 'gpon_bias_current_ma{job="odi",instance="s1"}'
+        values: '13x1008 17x72'
+      - series: 'gpon_rx_power_dbm{job="odi",instance="s1"}'
+        values: '-20x1008 -23x72'
+    alert_rule_test:
+      # 7 days in: still flat, nothing.
+      - {eval_time: 7d, alertname: OdiLaserBiasRising, exp_alerts: []}
+      - {eval_time: 7d, alertname: OdiRxPowerDropped, exp_alerts: []}
+      # 7 days plus 3 hours: the rx drop has held for over an hour, the
+      # bias rise not yet for 6.
+      - eval_time: 171h
+        alertname: OdiRxPowerDropped
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: rx power 2 dB below its 7-day average"
+              description: "The hourly mean of received power has been more than 2 dB under the 7-day mean for an hour. Something in the optical path got worse: a connector, a splice, a bend."
+      - {eval_time: 171h, alertname: OdiLaserBiasRising, exp_alerts: []}
+      - eval_time: 176h
+        alertname: OdiLaserBiasRising
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: laser bias 25% above its 7-day average"
+              description: "The hourly mean of the laser bias current has been more than 25% above its 7-day mean for 6 hours. The laser is ageing or its cooling got worse; compare with gpon_temperature_celsius and gpon_tx_power_dbm, and plan a replacement stick."
+
+  # A watchdog reset, then a loop of resets.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_uptime_seconds{job="odi",instance="s1"}'
+        values: '60+60x60'
+      - series: 'gpon_last_reset_reason{job="odi",instance="s1",reason="wdt_client",client="omcid"}'
+        values: '1x60'
+      - series: 'gpon_boot_count{job="odi",instance="s1"}'
+        values: '1x10 2x10 3x10 4x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OdiWatchdogReset
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, reason: wdt_client, client: omcid}
+            exp_annotations:
+              summary: "s1: rebooted by wdt_client omcid"
+              description: >-
+                The previous boot ended in wdt_client (client omcid), not in
+                a reboot someone asked for. Read /proc/odi_ramlog_prev on
+                the stick (or the diagnostics bundle) before the next reset
+                replaces it. Clears an hour after the boot.
+      - eval_time: 5m
+        alertname: OdiRebooted
+        exp_alerts:
+          - exp_labels: {severity: info, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: booted 6m 0s ago"
+              description: "Any reboot, including a power cycle and one asked for. Clears 10 minutes after the boot."
+      - {eval_time: 20m, alertname: OdiResetLoop, exp_alerts: []}
+      - eval_time: 35m
+        alertname: OdiResetLoop
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: 3 resets in an hour"
+              description: "The stick keeps resetting. Each boot is 75 to 80 s off the line. gpon_last_reset_reason says what fired."
+      # An hour after the boot the reset reason stops alerting.
+      - {eval_time: 60m, alertname: OdiWatchdogReset, exp_alerts: []}
+
+  # A reboot someone asked for does not alert as a watchdog reset.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_uptime_seconds{job="odi",instance="s1"}'
+        values: '60+60x10'
+      - series: 'gpon_last_reset_reason{job="odi",instance="s1",reason="reboot"}'
+        values: '1x10'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: OdiWatchdogReset, exp_alerts: []}
+
+  # Memory under the margin above the watchdog floor.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="free"}'
+        values: '1048576x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="buffers"}'
+        values: '524288x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="cached"}'
+        values: '1048576x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="total"}'
+        values: '28188672x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OdiMemoryLow
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: 2.5MiB reclaimable"
+              description: "Free plus buffers plus cached memory has been under 4 MiB for 10 minutes. The kernel watchdog resets the stick at 2 MiB available."
+
+  # lastgood.xml gets a new hash at 20m; lastgood_hs.xml disappears at 40m.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_exporter_up{job="odi",instance="s1"}'
+        values: '1x120'
+      - series: 'gpon_config_info{job="odi",instance="s1",file="lastgood.xml",hash="76ed442e5512"}'
+        values: '1x20'
+      - series: 'gpon_config_info{job="odi",instance="s1",file="lastgood.xml",hash="c78135e7630c"}'
+        values: '_x20 1x100'
+      - series: 'gpon_config_mtime_seconds{job="odi",instance="s1",file="lastgood.xml"}'
+        values: '1790641247x20 1790642447x100'
+      - series: 'gpon_config_mtime_seconds{job="odi",instance="s1",file="lastgood_hs.xml"}'
+        values: '1790641247x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: OdiConfigChanged, exp_alerts: []}
+      - eval_time: 25m
+        alertname: OdiConfigChanged
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, file: lastgood.xml}
+            exp_annotations:
+              summary: "s1: lastgood.xml changed"
+              description: "lastgood.xml on the config partition has a new hash. If nobody saved or restored settings, compare with the last backup (odi-oss tools/config-backup.sh keeps one per change). Clears 30 minutes after the change."
+      # 30 minutes on, the old hash has aged out of the window.
+      - {eval_time: 60m, alertname: OdiConfigChanged, exp_alerts: []}
+      - {eval_time: 35m, alertname: OdiConfigFileMissing, exp_alerts: []}
+      - eval_time: 55m
+        alertname: OdiConfigFileMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1, file: lastgood_hs.xml}
+            exp_annotations:
+              summary: "s1: lastgood_hs.xml is gone"
+              description: "lastgood_hs.xml is no longer on the config partition. It holds the provisioning identity (lastgood_hs.xml: GPON serial and MAC; lastgood.xml: PLOAM password, LOID, VLAN). Do not reboot: restore from the last backup first."

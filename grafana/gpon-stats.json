@@ -1054,7 +1054,7 @@
         "spec": {
           "id": 106,
           "title": "Port Hardware Receive Errors",
-          "description": "Hardware port receive error rate by kind (crc_align, fragment, jabber, undersize), 64-bit counters excluded -- oversize removed in exporter v1.1.0 (it was ordinary 1519+ B VLAN-tagged traffic, not an error; see gpon_port_frames_total{size=\"1519_max\"})",
+          "description": "Hardware port receive error rate by kind (crc_align, fragment, jabber, undersize), 64-bit counters. Undersize on port 3 (the CPU port) is one count per upstream OMCI reply: a 48-byte OMCI message plus FCS is a 52-byte frame, forwarded fine, and the stock firmware counts it the same way. It tracks how often the OLT polls, not a fault (OdiPortReceiveErrors ignores it). Oversize was removed in exporter v1.1.0 (ordinary 1519+ B VLAN-tagged traffic; see gpon_port_frames_total{size=\"1519_max\"}).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3056,7 +3056,7 @@
         "spec": {
           "id": 501,
           "title": "Load averages",
-          "description": "gpon_load{1,5,15}. Known-constant on this firmware (watchdog + led_swBlink kernel threads sit permanently in D state, pinning it at 2.00) -- shown for visibility, do not alert on it.",
+          "description": "gpon_load{1,5,15}. On odi-oss the load sits near 0 at idle. On the stock firmware it is pinned at 2.00 (the watchdog and led_swBlink kernel threads sleep in D state), so do not alert on it there.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Dashboard: the Load averages note says odi-oss idles near 0 (2.00 was the
+  stock firmware), and Port Hardware Receive Errors explains that port-3
+  undersize is one count per OMCI reply.
 - `grafana/gpon-stats.json`: the maintainer's Grafana dashboard (optics, ONU
   state, alarms, port throughput/drops/errors, pause frames, frame sizes,
   OMCI services, memory, uptime, image info), as a Grafana 12

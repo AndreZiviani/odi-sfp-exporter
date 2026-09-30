@@ -178,3 +178,19 @@ they are easy to trigger by accident while poking around:
 - **Reading an undecoded SoC register address with `devmem` can stall the
   bus until the hardware watchdog resets the device.** Do not probe
   addresses you cannot already account for.
+
+## Release checklist
+
+A release is cut only when the maintainer asks for one. Before tagging:
+
+1. **Every change since the last tag is in the changelog.** Walk
+   `git log --oneline <last-tag>..origin/main` and check that each merged
+   change has its entry under `## Unreleased`. Add any that are missing in
+   the release commit.
+2. **No merge debris.** `grep -nE '^(<<<<<<<|=======|>>>>>>>)' CHANGELOG.md`
+   finds nothing.
+3. **Move `## Unreleased` into the version section** named after the tag,
+   with the date, and leave an empty `## Unreleased` above it. Commit it as
+   `CHANGELOG: <tag>`, then tag that commit (`git tag -s`).
+4. **Check the published release** (`gh release view <tag>`): the assets are
+   there and the notes are the new section, not an empty one.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- AGENTS.md has a release checklist: every change since the last tag has an
+  entry, no merge debris, `Unreleased` moved into the tag section, and the
+  published notes checked.
 - `OdiPortReceiveErrors` no longer counts `kind="undersize"` on port 3 (the
   CPU port). Every upstream OMCI reply crosses it as a 52-byte frame (the
   48-byte baseline message plus the FCS, unpadded so the OLT receives

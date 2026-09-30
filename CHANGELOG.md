@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.2.1
+
 - AGENTS.md has a release checklist: every change since the last tag has an
   entry, no merge debris, `Unreleased` moved into the tag section, and the
   published notes checked.

@@ -48,6 +48,7 @@ other repo, not here.
     docs/ALERTS.md        the alerting rules: what each alert means, thresholds, dependencies
     prometheus/alerts.yml       Prometheus alerting rules on these metrics
     prometheus/alerts_test.yml  promtool unit tests for them (`make rules`)
+    grafana/gpon-stats.json     Grafana dashboard (v2 resource) for these metrics
     Makefile               every target below; re-enters itself with IN_CONTAINER=1
     .github/workflows/release.yml   build + gate on every push, publish on v* tags
 

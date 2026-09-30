@@ -37,7 +37,7 @@ The result is 8 KB and takes ~280 ms per scrape, most of which is forking
 
 ```
 src/metricsd.c        the exporter: socket, accept loop, HTTP response
-src/metrics_body.h    the metrics themselves; every metric name lives here, but gpon_provision_*
+src/metrics_body.h    the metrics themselves; every metric name lives here, except gpon_provision_*
 src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
 src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
 src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals

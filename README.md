@@ -25,9 +25,6 @@ gpon_alarm{alarm="los"} 0
 On odi-oss it also says which firmware slot is running and whether it is
 committed (`gpon_boot_slot`, `gpon_committed_slot`, `gpon_uncommitted`).
 
-See [docs/METRICS.md](docs/METRICS.md) for the full metric reference,
-[docs/ALERTS.md](docs/ALERTS.md) for ready-made Prometheus alerting rules
-([`prometheus/alerts.yml`](prometheus/alerts.yml)), and
 On an odi-oss image it also exports what the ISP provisioned -- T-CONTs, GEM
 ports, VLANs and rate limits (`gpon_provision_*`) -- so a plan change shows up
 on a graph:
@@ -39,8 +36,13 @@ gpon_provision_vlan_info{vlan="10",source="vlan_filter"} 1
 gpon_provision_traffic_descriptor_pir_bytes_per_second{descriptor="1"} 62500000
 ```
 
-See [docs/METRICS.md](docs/METRICS.md) for the full metric reference and
-[docs/DESIGN.md](docs/DESIGN.md) for why it is built this way.
+See [docs/METRICS.md](docs/METRICS.md) for the full metric reference,
+[docs/ALERTS.md](docs/ALERTS.md) for ready-made Prometheus alerting rules
+([`prometheus/alerts.yml`](prometheus/alerts.yml)),
+[`grafana/gpon-stats.json`](grafana/gpon-stats.json) for a Grafana dashboard
+(Grafana 12+ `dashboard.grafana.app/v2`: import it and pick your Prometheus or
+Mimir datasource), and [docs/DESIGN.md](docs/DESIGN.md) for why it is built
+this way.
 
 Part of [odi-oss](https://github.com/AndreZiviani/odi-oss), the open firmware
 project for the ODI DFP-34X-2C2 GPON stick.

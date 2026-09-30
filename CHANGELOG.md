@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `grafana/gpon-stats.json`: the maintainer's Grafana dashboard (optics, ONU
+  state, alarms, port throughput/drops/errors, pause frames, frame sizes,
+  OMCI services, memory, uptime, image info), as a Grafana 12
+  `dashboard.grafana.app/v2` resource with an `instance` variable. Linked
+  from the README.
+- README: the "See docs/..." sentence had the provisioning paragraph merged
+  into its middle; put back in order.
+
 ## v1.2.1
 
 - AGENTS.md has a release checklist: every change since the last tag has an

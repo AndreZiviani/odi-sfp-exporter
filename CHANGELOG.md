@@ -12,6 +12,13 @@
   from the README.
 - README: the "See docs/..." sentence had the provisioning paragraph merged
   into its middle; put back in order.
+- docs: repair text merged into the wrong place by union-resolved rebases.
+  AGENTS.md listed `src/metrics_body.h` twice in the layout and its `make
+  test` paragraph broke off mid-line and left out three of the tested
+  headers; docs/METRICS.md ran the OMCI paragraph into the config paragraph
+  with no blank line and had the boot-slot section between the health-gauge
+  table and the text that explains it; the layout in docs/DESIGN.md read "but
+  gpon_provision_*"; the Makefile comment above `test` was cut mid-sentence.
 
 ## v1.2.1
 

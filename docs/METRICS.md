@@ -152,6 +152,7 @@ seconds; a write that kept all four the same would be missed until the next
 one that does not. `md5sum` is bounded by `MD5SUM_TIMEOUT_MS` (2 s); on a
 timeout or failure the hash is left out, the mtime is still exported, and the
 next scrape tries again.
+
 From omcid, the odi-oss OMCI daemon, through `/bin/omcicli` (one short fork
 each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon`:
 
@@ -186,15 +187,6 @@ one on the vendor `omci_app` has no `provision` command, and a stuck omcid
 families absent, never zero. The parsing is `src/provision.h`, tested
 natively against fixtures and goldens (`test/test_provision.c`).
 
-Plus three health gauges:
-
-| metric | meaning |
-|---|---|
-| `gpon_exporter_up` | always 1 — distinguishes "scraped and found nothing" from "did not scrape" |
-| `gpon_image_info` | which firmware image this stick was built from, and the component builds inside it |
-| `gpon_diag_up` | 1 when `/bin/diag` ran and at least one section parsed |
-| `gpon_diag_sections_parsed` / `_expected` | how much of the diag scrape was understood |
-
 From odi-oss `/var/run/odi-slot`, which its `slot-state.sh` writes at every
 boot from the U-Boot environment and `/proc/cmdline` (format: odi-oss
 `docs/TOOLS.md`, "Slot state"), so the exporter never reads the environment
@@ -212,6 +204,15 @@ all (an older image, the stock firmware) omits all three. The file is written
 at boot and again when `slot-state.sh` is run by hand, which is what to do
 after `nv commit` so `gpon_uncommitted` drops without a reboot.
 `OdiUncommittedImage` (docs/ALERTS.md) fires on it.
+
+Plus three health gauges:
+
+| metric | meaning |
+|---|---|
+| `gpon_exporter_up` | always 1 — distinguishes "scraped and found nothing" from "did not scrape" |
+| `gpon_image_info` | which firmware image this stick was built from, and the component builds inside it |
+| `gpon_diag_up` | 1 when `/bin/diag` ran and at least one section parsed |
+| `gpon_diag_sections_parsed` / `_expected` | how much of the diag scrape was understood |
 
 `gpon_exporter_up` covers only the `/proc` half, so it stays 1 while every
 diag-derived metric is missing. The other two close that: `gpon_diag_up 0` is a

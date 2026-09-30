@@ -109,12 +109,12 @@ httpd: image
 
 # src/wrap.h (the octet-counter wraparound logic), src/resetinfo.h (the
 # /proc/odi_ramlog_prev parse), src/confighash.h (the md5sum parse and stat
-# comparison behind gpon_config_info) and the mib_* tables in
-# src/metrics_body.h have no MIPS-specific code, so they are tested with the
-# HOST compiler -- no Docker, no qemu-user. test_wrap.c, test_resetinfo.c and
-# test_confighash.c are real unit tests; test_metrics.sh is a fixture check on
-# the mib_* tables themselves, since
-# there is no host binary to point a fake diag output at.
+# comparison behind gpon_config_info), src/slot_state.h, src/provision.h and
+# the mib_* tables in src/metrics_body.h have no MIPS-specific code, so they
+# are tested with the HOST compiler -- no Docker, no qemu-user. The
+# test_*.c files are real unit tests; test_metrics.sh is a fixture check on
+# the mib_* tables themselves, since there is no host binary to point a fake
+# diag output at.
 # A temp file, not $(BUILD)/test_wrap: on CI $(BUILD) is created by `make
 # httpd`'s container as root (see the `sums` comment below), so a host-side
 # write into it fails with EACCES on Linux runners -- the same trap that bit

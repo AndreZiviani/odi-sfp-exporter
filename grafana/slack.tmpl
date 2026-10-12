@@ -69,10 +69,10 @@ The data source did not answer the rule query.
 {{- else -}}
 {{- if and (ne (index .Labels "severity") "info") (index .Annotations "description") }}{{ index .Annotations "description" }}
 {{ end -}}
-Since {{ $since }} · <{{ .GeneratorURL }}|Rule> · <{{ .SilenceURL }}|Silence>
+Since {{ $since }}{{ if match "^https?://" .GeneratorURL }} · <{{ .GeneratorURL }}|Rule>{{ end }}{{ if match "^https?://" .SilenceURL }} · <{{ .SilenceURL }}|Silence>{{ end }}
 {{- if and (match "^Odi" .Labels.alertname) (index .Labels "instance") }} · <{{ reReplaceAll "/$" "" $.ExternalURL }}/d/b45d043f-be14-46bf-ae11-8751703bb120?var-instance={{ urlquery (index .Labels "instance") }}|Dashboard>
-{{- else if .PanelURL }} · <{{ .PanelURL }}|Panel>
-{{- else if .DashboardURL }} · <{{ .DashboardURL }}|Dashboard>{{ end }}
+{{- else if match "^https?://" .PanelURL }} · <{{ .PanelURL }}|Panel>
+{{- else if match "^https?://" .DashboardURL }} · <{{ .DashboardURL }}|Dashboard>{{ end }}
 {{- end }}
 {{ end -}}
 {{- end }}

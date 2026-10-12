@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `grafana/slack.tmpl`: a link appears only when its URL is a full http(s)
+  URL; a test notification has no rule, and Grafana fills its rule URL with a
+  bare `?orgId=1`, which Slack showed as a literal `<|Rule>`.
+
 - `grafana/slack.tmpl`: a Slack notification template for Grafana alerting.
   One line per alert with a severity marker, the stick (or host or job) and
   the summary, the description, and short Rule / Silence / Dashboard links,

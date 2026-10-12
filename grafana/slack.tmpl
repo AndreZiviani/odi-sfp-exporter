@@ -1,0 +1,78 @@
+{{/*
+  Slack notification templates for Grafana alerting. Written for the
+  odi-sfp-exporter alerts (prometheus/alerts.yml imported as
+  Grafana-managed rules) but general: any alert renders sensibly.
+
+  Paste this file into Alerting > Contact points > Notification templates,
+  then in the Slack contact point set
+    Title:     {{ template "slack.title" . }}
+    Text body: {{ template "slack.text" . }}
+  docs/ALERTS.md, "Slack", has the rest of the setup.
+
+  - The target is the first label of the instance, without domain or port
+    (sfp-claro.ziviani.com.br:9100 -> sfp-claro); without an instance label,
+    host, then job; without any, only the alert name is shown.
+  - The headline is the summary annotation with a leading "host:port: "
+    removed; without a summary, the alert name.
+  - severity critical, warning and info get their own marker; any other
+    value, or none, gets a bell.
+  - An alert whose rule could not be evaluated (grafana_state_reason Error
+    or NoData) is a warning about the data path, never a recovery.
+  - Odi* alerts link the GPON stats dashboard for their instance; others
+    link the dashboard or panel the rule is attached to, if any.
+*/}}
+
+{{ define "slack.target" -}}
+{{- if index .Labels "instance" -}}{{ reReplaceAll "^([^.:/]+).*$" "$1" (index .Labels "instance") }}
+{{- else if index .Labels "host" -}}{{ reReplaceAll "^([^.:/]+).*$" "$1" (index .Labels "host") }}
+{{- else -}}{{ index .Labels "job" }}{{ end -}}
+{{- end }}
+
+{{ define "slack.prefix" -}}
+{{- if or (index .Labels "instance") (index .Labels "host") (index .Labels "job") }}{{ template "slack.target" . }}: {{ end -}}
+{{- end }}
+
+{{ define "slack.headline" -}}
+{{- if index .Annotations "summary" -}}{{ reReplaceAll "^[^ ]+:[0-9]+: " "" (index .Annotations "summary") }}
+{{- else -}}{{ .Labels.alertname }}{{ end -}}
+{{- end }}
+
+{{ define "slack.marker" -}}
+{{- $s := index .Labels "severity" -}}
+{{- if eq $s "critical" }}🔴{{ else if eq $s "warning" }}🟠{{ else if eq $s "info" }}ℹ️{{ else }}🔔{{ end -}}
+{{- end }}
+
+{{ define "slack.title" -}}
+{{- $a := index .Alerts 0 -}}
+{{- $r := index $a.Annotations "grafana_state_reason" -}}
+{{- if or (match "Error" $r) (match "NoData" $r) -}}
+⚠️ {{ template "slack.prefix" $a }}{{ $a.Labels.alertname }} could not be evaluated
+{{- else if eq .Status "resolved" -}}
+✅ {{ template "slack.prefix" $a }}{{ $a.Labels.alertname }} resolved
+{{- else -}}
+{{ template "slack.marker" $a }} {{ template "slack.prefix" $a }}{{ template "slack.headline" $a }}
+{{- end -}}
+{{- if gt (len .Alerts) 1 }} ({{ len .Alerts }} alerts){{ end -}}
+{{- end }}
+
+{{ define "slack.text" -}}
+{{- range .Alerts -}}
+{{- $r := index .Annotations "grafana_state_reason" -}}
+{{- $since := .StartsAt | tz "America/Sao_Paulo" | date "Jan 2 15:04" -}}
+{{- if gt (len $.Alerts) 1 }}*{{ template "slack.prefix" . }}{{ .Labels.alertname }}*
+{{ end -}}
+{{- if or (match "Error" $r) (match "NoData" $r) -}}
+{{ if index .Annotations "Error" }}{{ index .Annotations "Error" }}{{ else }}The query returned no data.{{ end }}
+The data source did not answer the rule query.
+{{- else if eq .Status "resolved" -}}
+{{ template "slack.headline" . }}: cleared after {{ (.EndsAt.Sub .StartsAt).Round 1000000000 }} (since {{ $since }}).
+{{- else -}}
+{{- if and (ne (index .Labels "severity") "info") (index .Annotations "description") }}{{ index .Annotations "description" }}
+{{ end -}}
+Since {{ $since }} · <{{ .GeneratorURL }}|Rule> · <{{ .SilenceURL }}|Silence>
+{{- if and (match "^Odi" .Labels.alertname) (index .Labels "instance") }} · <{{ reReplaceAll "/$" "" $.ExternalURL }}/d/b45d043f-be14-46bf-ae11-8751703bb120?var-instance={{ urlquery (index .Labels "instance") }}|Dashboard>
+{{- else if .PanelURL }} · <{{ .PanelURL }}|Panel>
+{{- else if .DashboardURL }} · <{{ .DashboardURL }}|Dashboard>{{ end }}
+{{- end }}
+{{ end -}}
+{{- end }}

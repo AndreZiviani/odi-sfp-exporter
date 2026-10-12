@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `grafana/slack.tmpl`: a Slack notification template for Grafana alerting.
+  One line per alert with a severity marker, the stick (or host or job) and
+  the summary, the description, and short Rule / Silence / Dashboard links,
+  instead of the default dump of every label and annotation; a rule that
+  could not be evaluated shows as a warning, never as resolved. Validated
+  with Grafana's own template engine. docs/ALERTS.md, "Grafana Cloud and
+  Slack", also covers the error state to set after an import (the import
+  leaves OK, which resolves a firing alert on any query error) and the
+  panel each rule should link for notification images.
+
 - `OdiGponAlarm`: the description no longer says the exporter has no BIP or
   FEC counters; it points at `gpon_ds_fec_codewords_total` and
   `gpon_ds_bip_error_blocks_total` (odi-oss v1.3.0 or later).

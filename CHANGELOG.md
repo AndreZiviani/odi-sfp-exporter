@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- The GPON link, from odi-oss `/proc/odi_gpon` (src/gpon_link.h): the line
+  counters of the GPON MAC as the kernel driver accumulates them (BIP
+  errors, FEC corrected bits, bytes and codewords and the uncorrectable
+  ones, PLend and BWmap errors, PLOAMd, BWmap allocations for this ONU, GEM
+  idle and non-idle frames and GEM errors, downstream Ethernet and OMCI
+  frames, upstream bursts, PLOAMu, DBRu, GEM frames and bytes), how often
+  and how long LOS, LOF and LOM were raised, time in each ONU state and the
+  state transitions, FEC in use per direction, the superframe count, and
+  the driver's PLOAM, REI, TO1/TO2 and interrupt counts. Counters are
+  `*_total`. A weak fibre shows as FEC corrections and BIP errors climbing,
+  and an ONU that says O5 while the OLT no longer grants it as
+  `gpon_ds_bwmap_allocations_total` standing still. The counters clear in
+  hardware when read, so the exporter never reads them: the driver is
+  their one reader. Needs an odi-oss kernel with the counters; on any other
+  the families are absent. docs/METRICS.md, "The GPON link".
+
 - Dashboard: the Load averages note says odi-oss idles near 0 (2.00 was the
   stock firmware), and Port Hardware Receive Errors explains that port-3
   undersize is one count per OMCI reply.

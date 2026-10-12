@@ -1,0 +1,165 @@
+# HELP gpon_ds_bip_error_blocks_total Downstream frames whose BIP-8 check failed (G.984.3 8.1.3.3). The count the REI PLOAM reports to the OLT.
+# TYPE gpon_ds_bip_error_blocks_total counter
+gpon_ds_bip_error_blocks_total 4
+# HELP gpon_ds_bip_error_bits_total Downstream bit errors the BIP-8 checks found.
+# TYPE gpon_ds_bip_error_bits_total counter
+gpon_ds_bip_error_bits_total 9
+# HELP gpon_ds_fec_corrected_bits_total Downstream bits the FEC decoder corrected. Grows with a weak line long before errors get through.
+# TYPE gpon_ds_fec_corrected_bits_total counter
+gpon_ds_fec_corrected_bits_total 2560000
+# HELP gpon_ds_fec_corrected_bytes_total Downstream bytes the FEC decoder corrected.
+# TYPE gpon_ds_fec_corrected_bytes_total counter
+gpon_ds_fec_corrected_bytes_total 2500000
+# HELP gpon_ds_fec_codewords_total Downstream FEC codewords that needed a correction, by result: uncorrectable is data lost.
+# TYPE gpon_ds_fec_codewords_total counter
+gpon_ds_fec_codewords_total{result="corrected"} 2530000
+gpon_ds_fec_codewords_total{result="uncorrectable"} 2
+# HELP gpon_ds_superframe_losses_total Losses of downstream superframe synchronisation, as the framer counts them.
+# TYPE gpon_ds_superframe_losses_total counter
+gpon_ds_superframe_losses_total 0
+# HELP gpon_ds_plend_total Downstream PLend fields (G.984.3 8.1.3.5) that needed the CRC: corrected, uncorrectable, or failed.
+# TYPE gpon_ds_plend_total counter
+gpon_ds_plend_total{result="corrected"} 3
+gpon_ds_plend_total{result="uncorrectable"} 0
+gpon_ds_plend_total{result="failed"} 0
+# HELP gpon_ds_bwmap_length_errors_total Downstream PLend fields whose Blen (the BWmap length) was too long.
+# TYPE gpon_ds_bwmap_length_errors_total counter
+gpon_ds_bwmap_length_errors_total 0
+# HELP gpon_ds_ploam_total Downstream PLOAM messages as the framer received them, by result.
+# TYPE gpon_ds_ploam_total counter
+gpon_ds_ploam_total{result="accepted"} 80000
+gpon_ds_ploam_total{result="crc_error"} 0
+gpon_ds_ploam_total{result="overflow"} 0
+# HELP gpon_ds_bwmap_allocations_total BWmap allocations the framer accepted for this ONU. Stops when the OLT no longer grants the ONU, though it may still say O5; far above its usual rate, the Alloc-ID table matches allocations that are not this ONU's.
+# TYPE gpon_ds_bwmap_allocations_total counter
+gpon_ds_bwmap_allocations_total 20700
+# HELP gpon_ds_bwmap_errors_total Downstream BWmaps the framer rejected, by kind.
+# TYPE gpon_ds_bwmap_errors_total counter
+gpon_ds_bwmap_errors_total{kind="crc"} 0
+gpon_ds_bwmap_errors_total{kind="overflow"} 0
+gpon_ds_bwmap_errors_total{kind="invalid_0"} 0
+gpon_ds_bwmap_errors_total{kind="invalid_1"} 0
+# HELP gpon_ds_activation_requests_total Serial-number and ranging requests the framer received, broadcast ones included.
+# TYPE gpon_ds_activation_requests_total counter
+gpon_ds_activation_requests_total{kind="serial_number"} 0
+gpon_ds_activation_requests_total{kind="ranging"} 0
+# HELP gpon_ds_gem_frames_total Downstream GEM frames, idle and not idle.
+# TYPE gpon_ds_gem_frames_total counter
+gpon_ds_gem_frames_total{kind="idle"} 4843967295
+gpon_ds_gem_frames_total{kind="non_idle"} 120000
+# HELP gpon_ds_gem_hec_corrected_total Downstream GEM headers whose HEC corrected an error.
+# TYPE gpon_ds_gem_hec_corrected_total counter
+gpon_ds_gem_hec_corrected_total 1
+# HELP gpon_ds_gem_delineation_losses_total Losses of downstream GEM frame delineation.
+# TYPE gpon_ds_gem_delineation_losses_total counter
+gpon_ds_gem_delineation_losses_total 0
+# HELP gpon_ds_gem_errors_total Downstream GEM frame errors, by kind.
+# TYPE gpon_ds_gem_errors_total counter
+gpon_ds_gem_errors_total{kind="length_mismatch"} 0
+gpon_ds_gem_errors_total{kind="port_mismatch"} 0
+gpon_ds_gem_errors_total{kind="over_interleave"} 0
+# HELP gpon_ds_eth_frames_total Ethernet frames reassembled from downstream GEM, by destination kind.
+# TYPE gpon_ds_eth_frames_total counter
+gpon_ds_eth_frames_total{kind="unicast"} 110000
+gpon_ds_eth_frames_total{kind="multicast"} 100
+# HELP gpon_ds_eth_multicast_frames_total Downstream multicast Ethernet frames the GEM block forwarded, and those it leaked (passed with no group match).
+# TYPE gpon_ds_eth_multicast_frames_total counter
+gpon_ds_eth_multicast_frames_total{action="forwarded"} 100
+gpon_ds_eth_multicast_frames_total{action="leaked"} 0
+# HELP gpon_ds_eth_fcs_errors_total Downstream Ethernet frames with a bad FCS.
+# TYPE gpon_ds_eth_fcs_errors_total counter
+gpon_ds_eth_fcs_errors_total 0
+# HELP gpon_ds_omci_frames_total Downstream OMCI messages the GEM block received.
+# TYPE gpon_ds_omci_frames_total counter
+gpon_ds_omci_frames_total 20
+# HELP gpon_us_bursts_total Upstream bursts sent.
+# TYPE gpon_us_bursts_total counter
+gpon_us_bursts_total 79980
+# HELP gpon_us_ploam_total Upstream PLOAM messages sent, all of them.
+# TYPE gpon_us_ploam_total counter
+gpon_us_ploam_total 20
+# HELP gpon_us_ploam_by_source_total Upstream PLOAM messages sent, by where they came from: the CPU queues or the framer itself.
+# TYPE gpon_us_ploam_by_source_total counter
+gpon_us_ploam_by_source_total{source="cpu_normal"} 0
+gpon_us_ploam_by_source_total{source="cpu_urgent"} 10
+gpon_us_ploam_by_source_total{source="auto_no_message"} 10
+gpon_us_ploam_by_source_total{source="auto_serial_number"} 0
+# HELP gpon_us_dbru_total Upstream DBRu reports sent.
+# TYPE gpon_us_dbru_total counter
+gpon_us_dbru_total 0
+# HELP gpon_us_gem_frames_total Upstream GEM frames sent. A 16-bit hardware count: above 65535 frames a second it saturates (gpon_counter_saturated_samples_total).
+# TYPE gpon_us_gem_frames_total counter
+gpon_us_gem_frames_total 9000
+# HELP gpon_us_gem_bytes_total Upstream GEM bytes sent, the 5-byte GEM headers included.
+# TYPE gpon_us_gem_bytes_total counter
+gpon_us_gem_bytes_total 11000000
+# HELP gpon_counter_saturated_samples_total Samples that read a hardware counter full: that second lost counts.
+# TYPE gpon_counter_saturated_samples_total counter
+gpon_counter_saturated_samples_total{counter="ds_gem_idle"} 1
+# HELP gpon_counter_samples_total Reads of the GPON line counters the driver made since boot, one a second.
+# TYPE gpon_counter_samples_total counter
+gpon_counter_samples_total 11
+# HELP gpon_alarm_events_total GPON alarms raised, as the driver read the live bit: every 100 ms and at every interrupt while the ONU is activated, every second otherwise.
+# TYPE gpon_alarm_events_total counter
+gpon_alarm_events_total{alarm="los"} 1
+gpon_alarm_events_total{alarm="lof"} 0
+gpon_alarm_events_total{alarm="lom"} 0
+# HELP gpon_alarm_seconds_total Time each GPON alarm was seen raised, to the 100 ms line poll while the ONU is activated, to the second otherwise.
+# TYPE gpon_alarm_seconds_total counter
+gpon_alarm_seconds_total{alarm="los"} 2.000
+gpon_alarm_seconds_total{alarm="lof"} 0.000
+gpon_alarm_seconds_total{alarm="lom"} 0.000
+# HELP gpon_onu_state_seconds_total Time the ONU spent in each activation state, to the second.
+# TYPE gpon_onu_state_seconds_total counter
+gpon_onu_state_seconds_total{state="O1"} 0.000
+gpon_onu_state_seconds_total{state="O2"} 0.000
+gpon_onu_state_seconds_total{state="O3"} 0.000
+gpon_onu_state_seconds_total{state="O4"} 2.000
+gpon_onu_state_seconds_total{state="O5"} 8.000
+gpon_onu_state_seconds_total{state="O6"} 0.000
+gpon_onu_state_seconds_total{state="O7"} 0.000
+# HELP gpon_onu_state_transitions_total ONU activation state changes, by state left and state entered.
+# TYPE gpon_onu_state_transitions_total counter
+gpon_onu_state_transitions_total{from="O1",to="O2"} 1
+gpon_onu_state_transitions_total{from="O2",to="O3"} 1
+gpon_onu_state_transitions_total{from="O3",to="O4"} 1
+gpon_onu_state_transitions_total{from="O4",to="O5"} 1
+# HELP gpon_fec_active 1 when FEC is in use in that direction (ds: the OLT sends it; us: the ONU sends it).
+# TYPE gpon_fec_active gauge
+gpon_fec_active{direction="ds"} 1
+gpon_fec_active{direction="us"} 1
+# HELP gpon_ds_superframe The downstream superframe count (30 bits, one per 125 us frame); standing still means no downstream frames.
+# TYPE gpon_ds_superframe gauge
+gpon_ds_superframe 305491896
+# HELP gpon_ploam_messages_total PLOAM messages the driver handled: received from the OLT, sent to it.
+# TYPE gpon_ploam_messages_total counter
+gpon_ploam_messages_total{direction="ds"} 120
+gpon_ploam_messages_total{direction="us"} 40
+# HELP gpon_ploam_messages_by_type_total PLOAM messages the driver handled, by direction and message id (G.984.3 9.2).
+# TYPE gpon_ploam_messages_by_type_total counter
+gpon_ploam_messages_by_type_total{direction="ds",type="0x01"} 3
+gpon_ploam_messages_by_type_total{direction="ds",type="0x03"} 1
+gpon_ploam_messages_by_type_total{direction="ds",type="0x04"} 1
+gpon_ploam_messages_by_type_total{direction="ds",type="0x0a"} 2
+gpon_ploam_messages_by_type_total{direction="ds",type="0x0b"} 1
+gpon_ploam_messages_by_type_total{direction="ds",type="0x0d"} 1
+gpon_ploam_messages_by_type_total{direction="ds",type="0x12"} 1
+gpon_ploam_messages_by_type_total{direction="us",type="0x01"} 2
+gpon_ploam_messages_by_type_total{direction="us",type="0x03"} 33
+gpon_ploam_messages_by_type_total{direction="us",type="0x09"} 4
+# HELP gpon_rei_sent_total REI PLOAM messages sent, one each BER interval in O5.
+# TYPE gpon_rei_sent_total counter
+gpon_rei_sent_total 33
+# HELP gpon_ploam_timer_expiries_total G.984.3 activation timers that ran out: TO1 (ranging), TO2 (POPUP).
+# TYPE gpon_ploam_timer_expiries_total counter
+gpon_ploam_timer_expiries_total{timer="to1"} 1
+gpon_ploam_timer_expiries_total{timer="to2"} 0
+# HELP gpon_irq_total GPON block interrupts serviced.
+# TYPE gpon_irq_total counter
+gpon_irq_total 9876
+# HELP gpon_irq_spurious_total GPON block interrupts with nothing pending.
+# TYPE gpon_irq_spurious_total counter
+gpon_irq_spurious_total 0
+# HELP gpon_onu_id The ONU-ID the OLT assigned; absent until it assigns one.
+# TYPE gpon_onu_id gauge
+gpon_onu_id 3

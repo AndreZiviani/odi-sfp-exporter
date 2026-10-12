@@ -20,6 +20,7 @@
 #include "confighash.h"
 #include "slot_state.h"
 #include "provision.h"
+#include "gpon_link.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -1017,7 +1018,8 @@ static int emit_omci_metrics(int fd)
  * What the OLT provisioned: gpon_provision_* (src/provision.h has the metrics
  * and both sources). The T-CONTs come from /proc/odi_gpon, a read; the rest
  * from `omcicli provision`, one more short fork under the same bound as
- * `dump srvflow`, and only when that one answered.
+ * `dump srvflow`, and only when that one answered. The same read of
+ * /proc/odi_gpon gives the link counters and times (src/gpon_link.h).
  */
 #define ODI_GPON_PROC "/proc/odi_gpon"
 
@@ -1029,7 +1031,9 @@ static void prov_put_fd(void *ctx, const char *s, unsigned long n)
 static void emit_provision_metrics(int fd, int omci_ok)
 {
 	static char *const argv[] = { "omcicli", "provision", 0 };
-	/* /proc/odi_gpon is about 2 KB (its PLOAM ring is most of it); the
+	/* /proc/odi_gpon is about 4.7 KB with the link counters and a full
+	 * PLOAM ring (test/fixtures/odi_gpon-counters.txt); the ring is last
+	 * and read by nothing here, so a short read would cost it first. The
 	 * provision answer of the ISP1 session is 0.6 KB. */
 	char buf[8192];
 	struct prov_out o;
@@ -1038,8 +1042,10 @@ static void emit_provision_metrics(int fd, int omci_ok)
 	o.put = prov_put_fd;
 	o.ctx = &fd;
 	n = read_file(ODI_GPON_PROC, buf, sizeof(buf));
-	if (n > 0)
+	if (n > 0) {
 		prov_emit_tconts(&o, buf);
+		link_emit(&o, buf);
+	}
 	if (!omci_ok)
 		return;
 	n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1,
@@ -1406,7 +1412,10 @@ static void emit_metrics(int fd)
 	/*
 	 * NOT exporting `gpon show counter global ds-eth`. Four consecutive reads
 	 * gave 55827, 13537, 53607, 8873 — the registers are read-and-clear, each
-	 * read returning the count since the previous one.
+	 * read returning the count since the previous one. On an odi-oss kernel
+	 * these counters are exported anyway, from the totals its driver keeps
+	 * as their one reader (src/gpon_link.h); the reasoning below is why
+	 * this exporter does not read them itself.
 	 *
 	 * Two problems, the second worse than the first:
 	 *
@@ -1417,11 +1426,9 @@ static void emit_metrics(int fd)
 	 *    whatever they take. Scraping would mutate device state that something
 	 *    else may depend on.
 	 *
-	 * The fix, if we want them, is to accumulate deltas into a monotonic total
-	 * held in this process — which is the standard treatment for read-and-clear
-	 * hardware counters, and gives correct counter-reset semantics on restart.
-	 * It is only sound if this exporter is the sole reader. Left undone until
-	 * that is established.
+	 * Accumulating deltas into a monotonic total is only sound with one
+	 * reader, which this process cannot guarantee on the stock firmware; the
+	 * odi-oss kernel driver can, so that is where it is done.
 	 */
 }
 

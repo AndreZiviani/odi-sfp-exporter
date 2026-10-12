@@ -187,6 +187,76 @@ one on the vendor `omci_app` has no `provision` command, and a stuck omcid
 families absent, never zero. The parsing is `src/provision.h`, tested
 natively against fixtures and goldens (`test/test_provision.c`).
 
+### The GPON link
+
+From the same read of odi-oss `/proc/odi_gpon`, no fork: the line counters of
+the GPON MAC, how long each alarm and ONU state lasted, and the driver's own
+PLOAM and interrupt counts. The hardware counters clear when they are read,
+so this exporter never reads them: the odi-oss driver is their one reader,
+sampling them once a second into 64-bit totals, and these are its totals
+(odi-oss `docs/TOOLS.md`, "/proc/odi_gpon", has the lines). A degraded fibre
+shows here first, and so does an ONU that says O5 but is no longer served.
+
+| metric | `/proc/odi_gpon` |
+|---|---|
+| `gpon_ds_bip_error_blocks_total`, `gpon_ds_bip_error_bits_total` | `ctr ds_bip_err_blocks`, `ds_bip_err_bits`: downstream BIP-8 errors (the blocks are what the REI reports to the OLT) |
+| `gpon_ds_fec_corrected_bits_total`, `gpon_ds_fec_corrected_bytes_total` | `ctr ds_fec_corrected_bits`, `_bytes` |
+| `gpon_ds_fec_codewords_total{result="corrected\|uncorrectable"}` | `ctr ds_fec_corrected_cw`, `ds_fec_uncorrectable_cw`: uncorrectable is data lost |
+| `gpon_ds_superframe_losses_total` | `ctr ds_superframe_loss` |
+| `gpon_ds_plend_total{result="corrected\|uncorrectable\|failed"}`, `gpon_ds_bwmap_length_errors_total` | `ctr ds_plend_*`, `ds_blen_too_long` (G.984.3 8.1.3.5) |
+| `gpon_ds_ploam_total{result="accepted\|crc_error\|overflow"}` | `ctr ds_ploam_*`: PLOAMd as the framer received them |
+| `gpon_ds_bwmap_allocations_total` | `ctr ds_bwmap_accepted`: allocations accepted for this ONU's Alloc-IDs |
+| `gpon_ds_bwmap_errors_total{kind="crc\|overflow\|invalid_0\|invalid_1"}` | `ctr ds_bwmap_*` |
+| `gpon_ds_activation_requests_total{kind="serial_number\|ranging"}` | `ctr ds_sn_requests`, `ds_ranging_requests`, broadcast ones included |
+| `gpon_ds_gem_frames_total{kind="idle\|non_idle"}`, `gpon_ds_gem_hec_corrected_total`, `gpon_ds_gem_delineation_losses_total`, `gpon_ds_gem_errors_total{kind="length_mismatch\|port_mismatch\|over_interleave"}` | `ctr ds_gem_*` |
+| `gpon_ds_eth_frames_total{kind="unicast\|multicast"}`, `gpon_ds_eth_multicast_frames_total{action="forwarded\|leaked"}`, `gpon_ds_eth_fcs_errors_total`, `gpon_ds_omci_frames_total` | `ctr ds_eth_*`, `ds_omci`: what the GEM block reassembled |
+| `gpon_us_bursts_total`, `gpon_us_dbru_total`, `gpon_us_gem_frames_total`, `gpon_us_gem_bytes_total` | `ctr us_*`: what went upstream (bytes include the 5-byte GEM headers) |
+| `gpon_us_ploam_total`, `gpon_us_ploam_by_source_total{source="cpu_normal\|cpu_urgent\|auto_no_message\|auto_serial_number"}` | `ctr us_ploam*` |
+| `gpon_counter_saturated_samples_total{counter}`, `gpon_counter_samples_total` | `ctr_saturated`, `ctr_samples` |
+| `gpon_alarm_events_total{alarm="los\|lof\|lom"}`, `gpon_alarm_seconds_total{alarm}` | `alarm_events`, `alarm_ms` |
+| `gpon_onu_state_seconds_total{state="O1".."O7"}`, `gpon_onu_state_transitions_total{from,to}` | `onu_state_ms`, `onu_transitions` |
+| `gpon_fec_active{direction="ds\|us"}`, `gpon_ds_superframe` | `fec_now`, `ds_superframe` (gauges) |
+| `gpon_ploam_messages_total{direction}`, `gpon_ploam_messages_by_type_total{direction,type}`, `gpon_rei_sent_total`, `gpon_ploam_timer_expiries_total{timer="to1\|to2"}`, `gpon_irq_total`, `gpon_irq_spurious_total`, `gpon_onu_id` | `ploam`, `ploam_type`, `rei_count`, `to1_expiries`, `to2_expiries`, `irq_count`, `irq_spurious`, `onu_id` |
+
+The live LOS, LOF and LOM bits are `gpon_alarm` from `diag` above, not
+repeated here.
+
+```promql
+rate(gpon_ds_fec_codewords_total{result="uncorrectable"}[5m]) > 0   # errors get through FEC
+rate(gpon_ds_bip_error_blocks_total[5m]) > 0                        # the line takes errors
+rate(gpon_ds_fec_corrected_bits_total[1h])                          # how hard FEC works: a weak line
+gpon_onu_state == 5 and on(instance) rate(gpon_ds_bwmap_allocations_total[5m]) == 0
+                                                                     # O5, but the OLT grants it nothing
+increase(gpon_alarm_seconds_total{alarm="los"}[1d])                  # seconds without light today
+increase(gpon_onu_state_transitions_total{from="O5"}[1d])            # times the ONU left O5
+```
+
+What to know before alerting on them:
+
+- **The totals count from the first sample**, one second after the boot
+  `gponact`; the first read only clears what the block held. They restart at
+  0 on every boot, which `rate()` treats as a counter reset.
+- **Alarms are read every 100 ms** (and at every interrupt) while the ONU
+  is activated, every second otherwise; a loss shorter than that can be
+  missed. ONU state times are to the second; transitions are all counted.
+- **Every count that shares a register is 16-bit** (the upstream bursts,
+  PLOAM, DBRu and GEM frames, and the downstream pairs; 8-bit for the PLend
+  `uncorrectable` and the Blen counts) and stops at all ones within a
+  sample. Above 65535 upstream GEM frames a second `gpon_us_gem_frames_total`
+  undercounts; `gpon_counter_saturated_samples_total` says when.
+  `gpon_us_gem_bytes_total` is 32-bit and does not fill at line rate.
+- **Reading one of these registers by hand** (`diag register get`, `memprobe`)
+  takes its count away from the totals.
+- Not established beyond the name the hardware gives them: the two
+  `invalid` BWmap kinds, `leaked` multicast, the difference between
+  `uncorrectable` and `failed` PLend (G.984.3 Table 8-a drops a frame when
+  both copies fail), and `over_interleave`.
+
+Absent on a stock kernel and on an odi-oss kernel from before the counters,
+never zero. The parsing is `src/gpon_link.h`, tested natively against a
+`/proc/odi_gpon` whose counter block is odi-oss's own test golden
+(`test/test_gpon_link.c`).
+
 From odi-oss `/var/run/odi-slot`, which its `slot-state.sh` writes at every
 boot from the U-Boot environment and `/proc/cmdline` (format: odi-oss
 `docs/TOOLS.md`, "Slot state"), so the exporter never reads the environment
@@ -346,8 +416,10 @@ Two problems, the second worse — they are not monotonic, so `counter` is the
 wrong type; and reading is destructive, so a scrape silently consumes the delta
 from anything else reading those registers, including the vendor web UI.
 
-Making them usable would mean accumulating deltas into a running total held in
-the exporter process, which is only sound if it is the sole reader. The parser
+Making them usable means accumulating deltas into a running total, which is
+only sound with a sole reader. The exporter cannot be one on the stock
+firmware; the odi-oss kernel driver is, and its totals are exported above
+("The GPON link"). The parser
 is still in `src/metrics_body.h`, unused — and now unnecessary: the
 `diag mib dump counter` block above carries the same traffic volume in both
 directions, free-running, 64-bit and non-destructive. That is what the web UI

@@ -38,13 +38,16 @@ The result is 8 KB and takes ~280 ms per scrape, most of which is forking
 ```
 src/metricsd.c        the exporter: socket, accept loop, HTTP response
 src/metrics_body.h    the metrics themselves; every metric name lives here, except gpon_provision_*
+                      and the GPON link families
 src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
+src/gpon_link.h       the GPON link families from /proc/odi_gpon, pure text in and out
 src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
 src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
 src/start.S           _start and a 6-argument syscall stub for setsockopt
 test/test_wrap.c      host-native unit test for src/wrap.h (`make test`)
 test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
 test/test_provision.c host-native test for src/provision.h against test/fixtures
+test/test_gpon_link.c host-native test for src/gpon_link.h against test/fixtures
 scripts/verify.sh     asserts ELF32 / big endian / MIPS / static / no INTERP
 scripts/toolchain-image.sh  prints (and pulls) the pinned toolchain image
 scripts/deploy.sh     push a file to the stick over netcat

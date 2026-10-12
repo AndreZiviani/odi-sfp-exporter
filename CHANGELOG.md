@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `OdiGponAlarm`: the description no longer says the exporter has no BIP or
+  FEC counters; it points at `gpon_ds_fec_codewords_total` and
+  `gpon_ds_bip_error_blocks_total` (odi-oss v1.3.0 or later).
+
 - `grafana/gpon-stats.json`: the dashboard now has two tabs. "Overview"
   holds the previous rows plus a compact "GPON link" row, after Optics, for
   the v1.3.0 line counters: stats for upstream grants/s, uncorrectable FEC

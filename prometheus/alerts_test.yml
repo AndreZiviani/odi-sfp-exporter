@@ -121,7 +121,7 @@ tests:
           - exp_labels: {severity: warning, job: odi, instance: s1, alarm: sd}
             exp_annotations:
               summary: "s1: GPON alarm sd"
-              description: "sd has been asserted for 5 minutes. sf and sd are the OLT-side signal fail and signal degrade thresholds on the downstream bit error rate -- the early warning for errors, since the exporter has no BIP or FEC counters."
+              description: "sd has been asserted for 5 minutes. sf and sd are the OLT-side signal fail and signal degrade thresholds on the downstream bit error rate. On odi-oss v1.3.0 or later the counters behind it are exported too: see gpon_ds_fec_codewords_total and gpon_ds_bip_error_blocks_total."
       - eval_time: 30m
         alertname: OdiOnuNotOperational
         exp_alerts:

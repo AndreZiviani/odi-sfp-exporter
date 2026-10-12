@@ -400,3 +400,54 @@ tests:
               summary: "s1: running an uncommitted image"
               description: "For 30 minutes s1 has run a slot that sw_commit does not name in at least one copy of the U-Boot environment (gpon_boot_slot, gpon_committed_slot say which): a trial boot. The next reset boots the other slot. Once the trial is checked, commit it on the stick with nv commit <slot> and slot-state.sh; otherwise reboot it back."
       - {eval_time: 75m, alertname: OdiUncommittedImage, exp_alerts: []}
+
+  # The stuck ONU: O5 throughout, the BWmap allocation counter grows for 30
+  # minutes (s1, s2) and then stands still on s1 only. s3 is in O1 with a flat
+  # counter (the state alert covers it, not this one). Uncorrectable FEC
+  # codewords climb on s4 and stay at 0 on s2.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_onu_state{job="odi",instance="s1"}'
+        values: '5x60'
+      - series: 'gpon_ds_bwmap_allocations_total{job="odi",instance="s1"}'
+        values: '0+124200x30 3726000x30'
+      - series: 'gpon_onu_state{job="odi",instance="s2"}'
+        values: '5x60'
+      - series: 'gpon_ds_bwmap_allocations_total{job="odi",instance="s2"}'
+        values: '0+124200x60'
+      - series: 'gpon_ds_fec_codewords_total{job="odi",instance="s2",result="uncorrectable"}'
+        values: '0x60'
+      - series: 'gpon_ds_fec_codewords_total{job="odi",instance="s2",result="corrected"}'
+        values: '0+1500000x60'
+      - series: 'gpon_onu_state{job="odi",instance="s3"}'
+        values: '1x60'
+      - series: 'gpon_ds_bwmap_allocations_total{job="odi",instance="s3"}'
+        values: '0x60'
+      - series: 'gpon_ds_fec_codewords_total{job="odi",instance="s4",result="uncorrectable"}'
+        values: '0+600x60'
+    alert_rule_test:
+      - {eval_time: 25m, alertname: OdiOnuNoUpstreamGrants, exp_alerts: []}
+      - {eval_time: 5m, alertname: OdiFecUncorrectable, exp_alerts: []}
+      - eval_time: 45m
+        alertname: OdiOnuNoUpstreamGrants
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: in O5 but the OLT grants no upstream time"
+              description: >-
+                The ONU reports O5 but its BWmap allocations have not moved
+                for 5 minutes: the OLT no longer grants it upstream
+                bandwidth, so nothing leaves the stick. A served ONU gets
+                about 2,000 allocations a second. Needs an odi-oss kernel
+                with the GPON line counters
+                (gpon_ds_bwmap_allocations_total).
+      - eval_time: 45m
+        alertname: OdiFecUncorrectable
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s4}
+            exp_annotations:
+              summary: "s4: uncorrectable FEC codewords"
+              description: >-
+                Downstream FEC codewords the ONU could not correct have been
+                arriving for 10 minutes: data is being lost on the fibre.
+                Check gpon_rx_power_dbm and clean or inspect the connectors.

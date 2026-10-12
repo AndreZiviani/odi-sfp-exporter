@@ -145,6 +145,44 @@ groups:
             for service: check the serial, PLOAM password, LOID and VLAN
             against the last config backup (gpon_config_info).
 
+      # O5 and nothing granted: the stuck ONU. The state still says
+      # operational, every optics metric is fine, and the OLT has stopped
+      # giving the ONU upstream time. The rate looks back 5 minutes, so the
+      # allocation counter has stood still at least that long.
+      - alert: OdiOnuNoUpstreamGrants
+        expr: |
+          gpon_onu_state == 5
+          and on (job, instance)
+          (sum by (job, instance) (rate(gpon_ds_bwmap_allocations_total[5m])) == 0)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: in O5 but the OLT grants no upstream time"
+          description: >-
+            The ONU reports O5 but its BWmap allocations have not moved for
+            5 minutes: the OLT no longer grants it upstream bandwidth, so
+            nothing leaves the stick. A served ONU gets about 2,000
+            allocations a second. Needs an odi-oss kernel with the GPON
+            line counters (gpon_ds_bwmap_allocations_total).
+
+      # Data lost on the fibre: FEC could not repair the codeword. Corrected
+      # codewords are the weak-line signal and are on the dashboard; this is
+      # the line past what FEC can hide.
+      - alert: OdiFecUncorrectable
+        expr: |
+          sum by (job, instance)
+          (rate(gpon_ds_fec_codewords_total{result="uncorrectable"}[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: uncorrectable FEC codewords"
+          description: >-
+            Downstream FEC codewords the ONU could not correct have been
+            arriving for 10 minutes: data is being lost on the fibre. Check
+            gpon_rx_power_dbm and clean or inspect the connectors.
+
       - alert: OdiOmciServicesDropped
         expr: |
           gpon_omci_services > 0

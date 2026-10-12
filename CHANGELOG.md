@@ -2,13 +2,17 @@
 
 ## Unreleased
 
-- `grafana/gpon-stats.json`: a "GPON link" row, after Optics, for the v1.3.0
-  line counters: FEC corrected and uncorrectable codewords and an estimated
-  pre-FEC bit error rate, BIP errors, upstream grants (BWmap allocations),
-  LOS/LOF/LOM events and seconds, time in each ONU state and state
-  transitions, PLOAM, REI and activation timers, downstream GEM frames and
-  errors, OMCI frames, upstream bursts, GEM frames and bytes, and a stat row
-  (FEC in use, ONU-ID, upstream grants, counter sampler health).
+- `grafana/gpon-stats.json`: the dashboard now has two tabs. "Overview"
+  holds the previous rows plus a compact "GPON link" row, after Optics, for
+  the v1.3.0 line counters: stats for upstream grants/s, uncorrectable FEC
+  blocks and LOS events over the range, one "Line errors/s" panel (FEC
+  corrected and uncorrectable codewords, BIP error blocks), upstream
+  grants/s over time, and a "Link events" bar panel (LOS/LOF/LOM and ONU
+  state transitions). "GPON link detail" holds the rest: FEC in use,
+  ONU-ID, counter sampler health, FEC codewords and the estimated pre-FEC
+  bit error rate, BIP errors, BWmap allocations and errors, alarm events
+  and seconds, state transitions, PLOAM, REI and timers, downstream GEM
+  frames and errors, OMCI frames, upstream bursts, GEM frames and bytes.
 - `prometheus/alerts.yml`: `OdiOnuNoUpstreamGrants` (O5 but the OLT grants
   no upstream time, critical) and `OdiFecUncorrectable` (uncorrectable FEC
   codewords, warning), with promtool tests; docs/ALERTS.md no longer says

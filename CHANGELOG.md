@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `grafana/gpon-stats.json`: a "GPON link" row, after Optics, for the v1.3.0
+  line counters: FEC corrected and uncorrectable codewords and an estimated
+  pre-FEC bit error rate, BIP errors, upstream grants (BWmap allocations),
+  LOS/LOF/LOM events and seconds, time in each ONU state and state
+  transitions, PLOAM, REI and activation timers, downstream GEM frames and
+  errors, OMCI frames, upstream bursts, GEM frames and bytes, and a stat row
+  (FEC in use, ONU-ID, upstream grants, counter sampler health).
+- `prometheus/alerts.yml`: `OdiOnuNoUpstreamGrants` (O5 but the OLT grants
+  no upstream time, critical) and `OdiFecUncorrectable` (uncorrectable FEC
+  codewords, warning), with promtool tests; docs/ALERTS.md no longer says
+  the exporter has no BIP or FEC counters.
+
 ## v1.3.0 (2026-10-12)
 
 - The GPON link, from odi-oss `/proc/odi_gpon` (src/gpon_link.h): the line

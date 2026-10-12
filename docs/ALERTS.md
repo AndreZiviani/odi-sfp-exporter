@@ -45,15 +45,20 @@ including a healthy stick on which nothing may fire.
 | `OdiGponAlarmCritical` | critical | `los`, `lof` or `lom` asserted for 1 min |
 | `OdiGponAlarm` | warning | any other `gpon_alarm` (`sf`, `sd`, `tx_too_long`, `tx_mismatch`) asserted for 5 min |
 | `OdiOmciNoServices` | critical | in O5 with `gpon_omci_services == 0` for 5 min: ranged but not provisioned, the wrong-identity case |
+| `OdiOnuNoUpstreamGrants` | critical | in O5 while `gpon_ds_bwmap_allocations_total` has not moved for 5 min (plus 2 min): the OLT stopped granting the ONU upstream time |
+| `OdiFecUncorrectable` | warning | `gpon_ds_fec_codewords_total{result="uncorrectable"}` increasing for 10 min: data is lost on the fibre |
 | `OdiOmciServicesDropped` | warning | fewer services than the 6-hour maximum, but not zero, for 15 min |
 | `OdiPortReceiveErrors` | warning | more than 10 malformed frames (CRC, fragment, jabber, undersize) in 15 min on one port, for 15 min; port 3 (CPU) undersize excluded: it is the OMCI replies (METRICS.md, "Known caveats") |
 
-The exporter has **no BIP, FEC or HEC counters**: the ONU MAC counters that
-carry them are read-and-clear, and FEC performance monitoring (OMCI ME 312)
-has no instance unless the OLT creates one (METRICS.md, "Deliberately not
-exported"). `sf` and `sd` stand in: they are the downstream bit-error-rate
-thresholds, signal fail and signal degrade. `OdiPortReceiveErrors` covers the
-Ethernet side of both ports.
+`sf` and `sd` are the OLT-side downstream bit-error-rate thresholds, signal
+fail and signal degrade. The line counters from odi-oss (METRICS.md, "The GPON
+link") add what the ONU sees itself: `OdiOnuNoUpstreamGrants` is the stuck
+ONU, and `OdiFecUncorrectable` is data lost on the fibre. Corrected FEC
+codewords and BIP errors are on the dashboard rather than alerted on, since a
+weak line corrects thousands a second without losing data. These two need an
+odi-oss kernel with the counters; on any other the series are absent and the
+rules stay silent. `OdiPortReceiveErrors` covers the Ethernet side of both
+ports.
 
 ### Optics
 

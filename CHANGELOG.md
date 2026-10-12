@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.3.0 (2026-10-12)
+
 - The GPON link, from odi-oss `/proc/odi_gpon` (src/gpon_link.h): the line
   counters of the GPON MAC as the kernel driver accumulates them (BIP
   errors, FEC corrected bits, bytes and codewords and the uncorrectable

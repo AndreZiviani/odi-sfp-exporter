@@ -135,6 +135,56 @@ deliberate save or restore as well: the question it asks is whether anyone
 meant it. odi-oss `tools/config-backup.sh` keeps a copy of the config per
 change to compare against.
 
+## Grafana Cloud and Slack
+
+Grafana can import the file as Grafana-managed rules (Alerting > Alert rules >
+Import to Grafana-managed rules, source "Prometheus YAML file", data source
+the one the sticks are scraped into). Three things to set after the import:
+
+- **Execution error state.** The import sets both the no-data and the error
+  state to OK, so a query that fails (a data source hiccup) resolves a
+  firing alert. Set the error state to **Keep last state** on every rule
+  except the five in `odi-exporter`, and to **Error** on those five: a
+  broken data path then sends one warning instead of resolving everything.
+  Leave no data at OK; a stick that stops answering loses its series, and
+  `OdiExporterDown` covers that.
+- **Images.** Grafana attaches a panel screenshot to a notification only for
+  a rule linked to a panel (annotations `__dashboardUid__` and
+  `__panelId__`). Link each rule to the panel in
+  [`grafana/gpon-stats.json`](../grafana/gpon-stats.json) that shows its
+  problem:
+
+  | rules | panel |
+  |---|---|
+  | OdiOnuNotOperational | 206 ONU state over time |
+  | OdiGponAlarmCritical, OdiGponAlarm | 102 GPON Alarms by type |
+  | OdiOmciNoServices, OdiOmciServicesDropped | 201 OMCI Services |
+  | OdiOmciDown | 643 OMCI frames/s |
+  | OdiOnuNoUpstreamGrants | 664 Upstream grants/s |
+  | OdiFecUncorrectable | 663 Line errors/s |
+  | OdiPortReceiveErrors | 106 Port Hardware Receive Errors |
+  | OdiRxPower*, OdiTxPowerOutOfRange | 9 PON Optical Power Trend |
+  | OdiLaserBiasRising | 5 Bias Current |
+  | OdiModuleTemperature* | 1 Transceiver Temperature |
+  | OdiSupplyVoltageOutOfRange | 2 SFP voltage |
+  | OdiWatchdogReset, OdiRebooted | 202 Uptime |
+  | OdiResetLoop | 203 Reboots (range) |
+  | OdiMemoryLow | 500 Memory |
+  | OdiUncommittedImage | 204 Image / Firmware / Exporter |
+  | odi-exporter group | 205 Exporter Health |
+
+  The Slack contact point needs a bot token (not a webhook URL) for Grafana
+  to upload the image.
+- **Message format.** [`grafana/slack.tmpl`](../grafana/slack.tmpl) is a
+  notification template (Alerting > Contact points > Notification
+  templates); set the Slack contact point Title to
+  `{{ template "slack.title" . }}` and Text to `{{ template "slack.text" . }}`.
+  Add `instance` to the notification policy group_by so each stick gets its
+  own message. The template is not ODI-specific: any alert gets a marker by
+  severity, its target (instance, host or job), the summary, the
+  description, and Rule / Silence / Dashboard links; an alert whose rule
+  could not be evaluated shows as a warning, never as resolved.
+
 ## Changing a threshold
 
 Edit `prometheus/alerts.yml`, adjust the matching case in

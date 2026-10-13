@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.4.0 (2026-10-13)
+
 - `gpon_port_{receive,transmit}_octets_total`: a counter reset is no longer
   read as a 32-bit wrap. The 64-bit extension treated every reading that went
   backwards as one wraparound, so port 0, which `omci_app` clears every 15

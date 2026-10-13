@@ -88,7 +88,12 @@ reads across 5 minutes, and every read taken since, it only ever grew.
 
 This does not change the metric type. `counter` is right precisely because
 Prometheus detects a counter reset and handles it; the cost is one interval's
-`rate()` every 15 minutes, on the host-side port. **Port 2 — the PON side, the
+`rate()` every 15 minutes, on the host-side port. The exporter's own 64-bit
+extension (above) must not turn the reset into a wrap: a reading that falls
+from below 2^31 is a reset and adds only what it holds now, so the total no
+longer jumps by about 3.8 GB at each boundary. A reset from 2^31 or more is
+indistinguishable from a wrap by value alone and still adds up to
+2^31 + the new reading. **Port 2 — the PON side, the
 one that answers "is it forwarding" — is unaffected.** Reading remains
 non-destructive either way; the resets come from PM collection, not from
 scraping.

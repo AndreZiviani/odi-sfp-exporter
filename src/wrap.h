@@ -102,14 +102,32 @@ static int port_index(const char *port, unsigned long plen)
 }
 
 /*
+ * A reading that went backwards is a 32-bit wraparound only if the counter
+ * could have wrapped: it has to have been in the upper half of the register
+ * (>= 2^31) when last read. Below that, no traffic a scrape interval can
+ * carry takes it past 2^32 and back, so the reading was reset instead --
+ * port 0's counters are cleared every 15 minutes by omci_app (docs/METRICS.md),
+ * and `diag mib reset counter` or a driver reload does the same to any port.
+ * Treating that as a wrap added a phantom 2^32 - last + raw, about 3.8 GB on
+ * the observed 487034420 -> 27505987, every 15 minutes.
+ */
+#define WRAP_MIN_LAST (1ULL << 31)
+
+/*
  * Extend one raw reading against the running per-port total.
  *
  * A value that grew since the last scrape is a plain delta -- the case that
  * always applies once the underlying register is genuinely 64-bit, since it
- * then never appears to shrink. A value that went backwards is treated as
- * exactly one 32-bit wraparound of the low word, which is the only case that
- * needs correcting; see the file comment for the bound this does not cover
- * (more than one wrap between two scrapes).
+ * then never appears to shrink. A value that went backwards from the upper
+ * half of the register is treated as exactly one 32-bit wraparound of the low
+ * word; see the file comment for the bound this does not cover (more than one
+ * wrap between two scrapes). A value that went backwards from the lower half
+ * is a reset: the counter restarted, so what it holds now is the traffic since
+ * (extended += raw), the same thing Prometheus does with a reset.
+ *
+ * What stays ambiguous: a reset from a reading >= 2^31 looks exactly like a
+ * wrap, and still adds 2^32 - last + raw, at most 2^31 + raw -- half the old
+ * error, and only on a port busy enough to hold 2 GB between two resets.
  */
 static unsigned long long extend_octets(struct octet_state *st, unsigned long long raw)
 {
@@ -118,8 +136,10 @@ static unsigned long long extend_octets(struct octet_state *st, unsigned long lo
 		st->extended = raw;
 	} else if (raw >= st->last_raw) {
 		st->extended += raw - st->last_raw;
-	} else {
+	} else if (st->last_raw >= WRAP_MIN_LAST) {
 		st->extended += (raw + (1ULL << 32)) - st->last_raw;
+	} else {
+		st->extended += raw;
 	}
 	st->last_raw = raw;
 	return st->extended;

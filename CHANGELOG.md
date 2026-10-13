@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `gpon_port_{receive,transmit}_octets_total`: a counter reset is no longer
+  read as a 32-bit wrap. The 64-bit extension treated every reading that went
+  backwards as one wraparound, so port 0, which `omci_app` clears every 15
+  minutes (487034420 then 27505987 was observed), gained a phantom 2^32 -
+  last + raw, about 3.8 GB, at each boundary: a spike of roughly 100 Mbit/s in
+  `rate()` on the host-side throughput panel of every stock-firmware stick, in
+  a counter that looked monotonic and clean. A reading that falls from below
+  2^31 cannot have wrapped, so it is now a reset and adds only what it holds.
+  A reset from 2^31 or more still looks like a wrap (at most 2^31 + the new
+  reading is added, half the old error). `test/test_wrap.c` has the observed
+  pair, a reset to zero, the 2^31 edge and a wrap followed by a reset.
+
 - `grafana/slack.tmpl`: a link appears only when its URL is a full http(s)
   URL; a test notification has no rule, and Grafana fills its rule URL with a
   bare `?orgId=1`, which Slack showed as a literal `<|Rule>`.

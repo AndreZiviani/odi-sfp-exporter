@@ -103,8 +103,11 @@ available:
    wrap from a reset) until then.
 2. **Extend in-process on every real scrape** (chosen): track the last raw
    reading and a running 64-bit total per port (`src/wrap.h`,
-   `extend_octets()`); a reading that goes backwards is treated as exactly
-   one 32-bit wraparound. This rides on the diag invocation the scrape is
+   `extend_octets()`); a reading that goes backwards from the upper half of
+   the register (2^31 or more) is treated as exactly one 32-bit wraparound,
+   and from the lower half as a counter reset, since it cannot have wrapped:
+   port 0 is cleared every 15 minutes and a wrap there added a phantom
+   3.8 GB each time. This rides on the diag invocation the scrape is
    already paying for — no new fork, no new failure domain — and degrades
    to option 1's behaviour for free once the underlying register really is
    64-bit, since the value then never goes backwards.

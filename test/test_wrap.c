@@ -97,6 +97,51 @@ static void test_single_wrap(void)
 	      "scrape after the wrap: got %llu", st.extended);
 }
 
+/*
+ * A counter reset is not a wrap. Port 0 is cleared every 15 minutes by
+ * omci_app: the observed pair is 487034420 -> 27505987 (docs/METRICS.md), and
+ * the old code added 2^32 + 27505987 - 487034420, about 3.8 GB, each time.
+ */
+static void test_reset_is_not_a_wrap(void)
+{
+	struct octet_state st;
+	unsigned long long before = 487034420ULL, after = 27505987ULL;
+
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, before);
+	CHECK(extend_octets(&st, after) == before + after,
+	      "reset: got %llu want %llu (a phantom 2^32 step if larger)",
+	      st.extended, before + after);
+	CHECK(extend_octets(&st, after + 1000) == before + after + 1000,
+	      "after the reset it counts normally: got %llu", st.extended);
+
+	/* A reset to exactly zero. */
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 123456789ULL);
+	CHECK(extend_octets(&st, 0) == 123456789ULL,
+	      "reset to 0: got %llu", st.extended);
+
+	/* The edge: last = 2^31 - 1 cannot have wrapped, 2^31 can. */
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 2147483647ULL);
+	CHECK(extend_octets(&st, 5) == 2147483647ULL + 5,
+	      "reset just under 2^31: got %llu", st.extended);
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 2147483648ULL);
+	CHECK(extend_octets(&st, 5) == 4294967296ULL + 5,
+	      "wrap from exactly 2^31: got %llu", st.extended);
+
+	/* A reset then a real wrap on the same port still extends: the two
+	 * cases must not poison each other's state. */
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 4294967000ULL);
+	extend_octets(&st, 10ULL);			/* wrap */
+	extend_octets(&st, 700ULL);
+	extend_octets(&st, 50ULL);			/* reset */
+	CHECK(st.extended == 4294967296ULL + 10ULL + (700ULL - 10ULL) + 50ULL,
+	      "wrap then reset: got %llu", st.extended);
+}
+
 /* Two ports must not share state. */
 static void test_per_port_independence(void)
 {
@@ -132,6 +177,7 @@ int main(void)
 	test_format_parse_roundtrip();
 	test_no_wrap_passthrough();
 	test_single_wrap();
+	test_reset_is_not_a_wrap();
 	test_per_port_independence();
 	test_port_index();
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.4.1 (2026-10-14)
+
 - GPON link metrics: a total of 11 digits or more (10000000000 and up) was
   dropped from the scrape, so `gpon_us_gem_bytes_total` vanished after a few
   hours of traffic and the idle GEM frame total soon after boot. Values of

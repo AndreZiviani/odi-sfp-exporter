@@ -8,8 +8,8 @@
  *   provision-td.txt    the same format with traffic descriptors, which
  *                       neither ISP session creates: the shape is omcid's,
  *                       the values are made up
- *   odi_gpon-*.txt      /proc/odi_gpon, its alloc_ids line in the odi-oss
- *                       kernel format, trimmed to a few other lines
+ *   odi_gpon-<name>/status  /proc/odi_gpon/status, its alloc_ids line in the
+ *                       odi-oss kernel format, trimmed to a few other lines
  *
  * The goldens are the .prom files beside them; UPDATE=1 rewrites them. Besides
  * matching them this checks what a golden cannot show: that absent sources
@@ -157,13 +157,13 @@ static void nothing(const char *what, const char *proc, const char *prov)
 
 int main(void)
 {
-	golden("provision-isp1", "test/fixtures/odi_gpon-o5.txt",
+	golden("provision-isp1", "test/fixtures/odi_gpon-o5/status",
 	       "test/fixtures/provision-isp1.txt");
-	golden("provision-td", "test/fixtures/odi_gpon-noalloc.txt",
+	golden("provision-td", "test/fixtures/odi_gpon-noalloc/status",
 	       "test/fixtures/provision-td.txt");
 
-	nothing("an empty /proc/odi_gpon and no omcicli answer", "", "");
-	nothing("a /proc/odi_gpon from a kernel with no alloc_ids line",
+	nothing("an empty /proc/odi_gpon/status and no omcicli answer", "", "");
+	nothing("a /proc/odi_gpon/status with no alloc_ids line",
 		"state 5 (O5)\nonu_id 3\nploam ds_rx 1 us_tx 1\n", 0);
 	nothing("the vendor omcicli usage text", 0,
 		"usage: omcicli <group> <command> [args]\n"

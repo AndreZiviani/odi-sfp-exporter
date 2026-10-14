@@ -6,28 +6,34 @@
  * that still says O5: the BWmap allocations addressed to it stop, or run far
  * above normal when the Alloc-ID table holds rows the OLT never assigned.
  *
- * One source, /proc/odi_gpon from the odi-oss kernel driver, already read
- * once per scrape for the T-CONTs (provision.h). No fork, and no read of a
+ * One source, /proc/odi_gpon/ from the odi-oss kernel driver, a directory of
+ * three files (status, counters, ploam), already read once per scrape for the
+ * T-CONTs (provision.h). No fork, and no read of a
  * hardware counter here: those clear when read, so the driver is their one
  * reader, sampling them every second into 64-bit totals. This side only
- * renders lines it finds; on a stock kernel, or an odi-oss kernel from
- * before the counters, there are none and nothing is emitted.
+ * renders lines it finds; on the stock firmware, which has no /proc/odi_gpon
+ * at all, there are none and nothing is emitted. Each file is optional: one
+ * that cannot be read costs only the metrics from its lines.
  *
- * The lines, one fact each (odi-oss docs/TOOLS.md has the full format):
+ * The three files are read into one buffer and parsed as one text, since no
+ * key appears in two of them. The lines, one fact each (odi-oss
+ * docs/TOOLS.md has the full format), by file:
  *
+ * counters:
  *     ctr <name> <total>               a hardware counter, since sampling began
  *     ctr_saturated <name> <samples>   samples that read the counter full
  *     ctr_samples <n>
+ *
+ * status:
  *     alarm_events <los|lof|lom> <n>   clear -> set, as read
  *     alarm_ms <los|lof|lom> <ms>
  *     onu_state_ms <O1..O7> <ms>
  *     onu_transitions <from> <to> <n>
  *     fec_now <ds|us> <0|1>
  *     ds_superframe <n>
+ *     rei_count, to1_expiries, to2_expiries, irq_count, irq_spurious, onu_id
  *
- * and the older ones, from before the counters: `ploam ds_rx <n> us_tx <n>`,
- * `ploam_type <ds|us> <0xNN> <n>`, `rei_count`, `to1_expiries`,
- * `to2_expiries`, `irq_count`, `irq_spurious`, `onu_id`.
+ * ploam: `ploam ds_rx <n> us_tx <n>` and `ploam_type <ds|us> <0xNN> <n>`.
  *
  * Every family is a table row below, so the names live in one place. A
  * counter name the table does not know is skipped: a newer kernel can add
@@ -393,6 +399,75 @@ static void link_emit(const struct prov_out *o, const char *proc)
 			}
 		}
 	}
+}
+
+/* ------------------------------------------ the files, and the scrape glue */
+
+/* The files of /proc/odi_gpon/, the ring-bearing one last: the ring is read
+ * by nothing here, so a short read costs it before anything else. */
+#define GPON_PROC_DIR "/proc/odi_gpon"
+static const char *const gpon_proc_files[] = { "status", "counters", "ploam" };
+
+typedef long (*gpon_read_fn)(const char *path, char *buf, unsigned long cap);
+typedef long (*gpon_omcicli_fn)(char *buf, unsigned long cap);
+
+/* Every readable file of GPON_PROC_DIR, one after the other, into buf as one
+ * text. A file that cannot be read (the stock firmware has none, an older
+ * odi-oss kernel has a single /proc/odi_gpon file where the directory is) is
+ * skipped without a word: there is no detection of which image this is, the
+ * metrics of an absent file are simply not there. Returns the byte count,
+ * 0 when nothing could be read. rd is read_file()'s shape: NUL-terminates,
+ * reads at most cap - 1. */
+static unsigned long gpon_proc_load(gpon_read_fn rd, char *buf, unsigned long cap)
+{
+	unsigned long off = 0, i;
+
+	buf[0] = 0;
+	for (i = 0; i < sizeof(gpon_proc_files) / sizeof(gpon_proc_files[0]); i++) {
+		char path[48];
+		unsigned long p = 0, k = 0;
+		long n;
+
+		while (GPON_PROC_DIR[p]) {
+			path[p] = GPON_PROC_DIR[p];
+			p++;
+		}
+		path[p++] = '/';
+		while (gpon_proc_files[i][k])
+			path[p++] = gpon_proc_files[i][k++];
+		path[p] = 0;
+		if (off + 1 >= cap)
+			break;
+		n = rd(path, buf + off, cap - off);
+		if (n > 0)
+			off += (unsigned long)n;
+		buf[off] = 0;
+	}
+	return off;
+}
+
+/* The gpon_provision_* and link families of one scrape: the T-CONTs and the
+ * link from /proc/odi_gpon/, then, when the caller says omcid answered
+ * (omci_ok), the rest from `omcicli provision` through omcicli, which fills
+ * buf and returns its length. Each source stands alone: no /proc files, or
+ * no omcicli answer, drops that source's families and nothing else. */
+static void gpon_provision_scrape(const struct prov_out *o, gpon_read_fn rd,
+				  gpon_omcicli_fn omcicli, int omci_ok,
+				  char *buf, unsigned long cap)
+{
+	long n;
+
+	if (gpon_proc_load(rd, buf, cap) > 0) {
+		prov_emit_tconts(o, buf);
+		link_emit(o, buf);
+	}
+	if (!omci_ok)
+		return;
+	n = omcicli(buf, cap - 1);
+	if (n <= 0)
+		return;
+	buf[n] = 0;
+	prov_emit_omci(o, buf);
 }
 
 #endif /* ODI_GPON_LINK_H */

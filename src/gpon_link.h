@@ -290,6 +290,19 @@ static void link_put_label_name(const struct prov_out *o, const char *names, int
 
 /* One sample from the line, if the row matches it. Returns 1 when it did
  * (and, with dry set, only says so). */
+/* The values are 64-bit totals from the driver, up to 20 digits: a
+ * prov_digits() check (10 digits, for ids and VLANs) dropped any counter
+ * past 9999999999, such as the upstream GEM bytes after a few hours. */
+static int link_digits(const char *s, unsigned long n)
+{
+	unsigned long i;
+
+	for (i = 0; i < n; i++)
+		if (s[i] < '0' || s[i] > '9')
+			return 0;
+	return n > 0 && n <= 20;
+}
+
 static int link_row_sample(const struct prov_out *o, const char *name,
 			   const struct link_row *r, const char *l, unsigned long n,
 			   int dry)
@@ -326,7 +339,7 @@ static int link_row_sample(const struct prov_out *o, const char *name,
 		if (!v)
 			return 0;
 	}
-	if (!prov_digits(v, vn) || !vn)
+	if (!link_digits(v, vn))
 		return 0;
 	if (dry)
 		return 1;

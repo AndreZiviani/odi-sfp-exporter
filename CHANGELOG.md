@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- GPON link metrics: a total of 11 digits or more (10000000000 and up) was
+  dropped from the scrape, so `gpon_us_gem_bytes_total` vanished after a few
+  hours of traffic and the idle GEM frame total soon after boot. Values of
+  up to 20 digits, the 64-bit range the driver keeps, are now emitted.
+
 ## v1.4.0 (2026-10-13)
 
 - `gpon_port_{receive,transmit}_octets_total`: a counter reset is no longer

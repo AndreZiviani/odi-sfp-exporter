@@ -1,0 +1,32 @@
+# HELP gpon_gem_frames_total GEM frames on a GEM port since the flow was created: received downstream, sent upstream. A GEM frame is a fragment of an Ethernet frame or a whole one.
+# TYPE gpon_gem_frames_total counter
+gpon_gem_frames_total{direction="ds",gem_port="4095"} 10
+gpon_gem_frames_total{direction="ds",gem_port="1434"} 20000
+gpon_gem_frames_total{direction="ds",gem_port="1435"} 12
+gpon_gem_frames_total{direction="ds",gem_port="1440"} 4294967295
+gpon_gem_frames_total{direction="us",gem_port="1562"} 13000
+gpon_gem_frames_total{direction="us",gem_port="1566"} 330
+# HELP gpon_gem_bytes_total Bytes on a GEM port since the flow was created: received downstream, sent upstream.
+# TYPE gpon_gem_bytes_total counter
+gpon_gem_bytes_total{direction="ds",gem_port="4095"} 800
+gpon_gem_bytes_total{direction="ds",gem_port="1434"} 28000000
+gpon_gem_bytes_total{direction="ds",gem_port="1435"} 900
+gpon_gem_bytes_total{direction="ds",gem_port="1440"} 1500000000
+gpon_gem_bytes_total{direction="us",gem_port="1562"} 37000000
+gpon_gem_bytes_total{direction="us",gem_port="1566"} 4294994796
+# HELP gpon_gem_eth_frames_total Ethernet frames on a GEM port since the flow was created, by kind: rx and fwd downstream (received from the GEM layer, forwarded to the switch), tx upstream.
+# TYPE gpon_gem_eth_frames_total counter
+gpon_gem_eth_frames_total{direction="ds",gem_port="4095",kind="rx"} 10
+gpon_gem_eth_frames_total{direction="ds",gem_port="1434",kind="rx"} 20000
+gpon_gem_eth_frames_total{direction="ds",gem_port="1435",kind="rx"} 12
+gpon_gem_eth_frames_total{direction="ds",gem_port="1440",kind="rx"} 0
+gpon_gem_eth_frames_total{direction="ds",gem_port="4095",kind="fwd"} 10
+gpon_gem_eth_frames_total{direction="ds",gem_port="1434",kind="fwd"} 20000
+gpon_gem_eth_frames_total{direction="ds",gem_port="1435",kind="fwd"} 11
+gpon_gem_eth_frames_total{direction="ds",gem_port="1440",kind="fwd"} 0
+gpon_gem_eth_frames_total{direction="us",gem_port="1562",kind="tx"} 2000
+gpon_gem_eth_frames_total{direction="us",gem_port="1566",kind="tx"} 50
+# HELP gpon_gem_flow_count_faults_total Per-flow counts the driver could not use: ack_timeout, a count that never answered and stays for the next second; saturated, a count read full, which lost counts.
+# TYPE gpon_gem_flow_count_faults_total counter
+gpon_gem_flow_count_faults_total{kind="ack_timeout"} 0
+gpon_gem_flow_count_faults_total{kind="saturated"} 1

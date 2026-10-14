@@ -28,6 +28,7 @@ other repo, not here.
     src/slot_state.h      the boot-slot metrics from odi-oss /var/run/odi-slot; pure, host-tested
     src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
     src/gpon_link.h       the GPON link counters, alarm and state times from /proc/odi_gpon/; pure
+    src/gpon_flow.h       the per-GEM-port families from /proc/odi_gpon/flows; pure, host-tested
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
@@ -38,6 +39,7 @@ other repo, not here.
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
     test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens
     test/test_gpon_link.c host-native test for src/gpon_link.h against test/fixtures, with a golden; also the scrape with no /proc files
+    test/test_gpon_flow.c host-native test for src/gpon_flow.h against test/fixtures, with a golden
     scripts/verify.sh     asserts ELF32 / big endian / MIPS / static / no INTERP
     scripts/toolchain-image.sh  prints (and pulls) the pinned toolchain image
     scripts/deploy.sh     push a file to the stick over netcat
@@ -70,7 +72,7 @@ other repo, not here.
 
 `make test` is host-native (plain `cc`, no Docker, no qemu-user) — it covers
 `src/wrap.h`, `src/resetinfo.h`, `src/confighash.h`, `src/slot_state.h`,
-`src/provision.h`, `src/gpon_link.h` and the `mib_*` tables in
+`src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h` and the `mib_*` tables in
 `src/metrics_body.h`, which have
 no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,

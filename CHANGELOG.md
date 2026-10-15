@@ -12,10 +12,9 @@
   where the aggregate counters cannot. The file is optional like the
   others: the stock firmware and an older odi-oss kernel have none, and then
   nothing is emitted and the rest is unchanged. Totals are read as up to 20
-  digits (a byte total passes 10 within hours). Stacked on the
-  `/proc/odi_gpon` split, so it has to be rebased onto main after that
-  merges. Test: `test/test_gpon_flow.c`, and a scrape with and without the
-  file in `test/test_gpon_link.c`. Refs #92.
+  digits (a byte total passes 10 within hours). Test:
+  `test/test_gpon_flow.c`, and a scrape with and without the file in
+  `test/test_gpon_link.c`. Refs #92.
 
 - BREAKING: the GPON metrics read odi-oss `/proc/odi_gpon/status`,
   `counters` and `ploam` (odi-oss split the old `/proc/odi_gpon` file into

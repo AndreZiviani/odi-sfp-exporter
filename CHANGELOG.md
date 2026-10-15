@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.5.0 (2026-10-15)
+
 - Host port and safe-mode metrics, from the files an odi-oss image with
   `HOST_AUTONEG` and the safe mode keeps (`/var/run/host-autoneg`,
   `/var/run/safe-mode`, `/etc/config/safe-mode`, the `odi_switch.host_link`

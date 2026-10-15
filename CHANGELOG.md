@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `gpon_gem_frames_total{direction,gem_port}`, `gpon_gem_bytes_total` and
+  `gpon_gem_eth_frames_total{direction,gem_port,kind="rx|fwd|tx"}`: what each
+  GEM port has carried, downstream and upstream, from the new odi-oss
+  `/proc/odi_gpon/flows` (the driver samples the clear-on-read per-flow
+  registers and keeps 64-bit totals; this side only renders them), and
+  `gpon_gem_flow_count_faults_total{kind}` for counts the driver could not
+  read in time or read full. A silent GEM port on a multi-service line shows
+  where the aggregate counters cannot. The file is optional like the
+  others: the stock firmware and an older odi-oss kernel have none, and then
+  nothing is emitted and the rest is unchanged. Totals are read as up to 20
+  digits (a byte total passes 10 within hours). Stacked on the
+  `/proc/odi_gpon` split, so it has to be rebased onto main after that
+  merges. Test: `test/test_gpon_flow.c`, and a scrape with and without the
+  file in `test/test_gpon_link.c`. Refs #92.
+
 - BREAKING: the GPON metrics read odi-oss `/proc/odi_gpon/status`,
   `counters` and `ploam` (odi-oss split the old `/proc/odi_gpon` file into
   that directory, same line formats), so this metricsd needs an odi-oss

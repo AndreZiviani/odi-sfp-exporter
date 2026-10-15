@@ -7,7 +7,7 @@
  * above normal when the Alloc-ID table holds rows the OLT never assigned.
  *
  * One source, /proc/odi_gpon/ from the odi-oss kernel driver, a directory of
- * three files (status, counters, ploam), already read once per scrape for the
+ * four files (status, counters, flows, ploam), already read once per scrape for the
  * T-CONTs (provision.h). No fork, and no read of a
  * hardware counter here: those clear when read, so the driver is their one
  * reader, sampling them every second into 64-bit totals. This side only
@@ -15,8 +15,9 @@
  * at all, there are none and nothing is emitted. Each file is optional: one
  * that cannot be read costs only the metrics from its lines.
  *
- * The three files are read into one buffer and parsed as one text, since no
- * key appears in two of them. The lines, one fact each (odi-oss
+ * The four files are read into one buffer and parsed as one text, since no
+ * key appears in two of them. The flows file has its own families
+ * (gpon_flow.h); the lines below are the other three. The lines, one fact each (odi-oss
  * docs/TOOLS.md has the full format), by file:
  *
  * counters:
@@ -47,6 +48,7 @@
 #define ODI_GPON_LINK_H
 
 #include "provision.h"
+#include "gpon_flow.h"
 
 /* link_row.arg: the second word of the line, or one of these. */
 #define LINK_VALUE ((const char *)0)	/* "key <value>" */
@@ -419,7 +421,7 @@ static void link_emit(const struct prov_out *o, const char *proc)
 /* The files of /proc/odi_gpon/, the ring-bearing one last: the ring is read
  * by nothing here, so a short read costs it before anything else. */
 #define GPON_PROC_DIR "/proc/odi_gpon"
-static const char *const gpon_proc_files[] = { "status", "counters", "ploam" };
+static const char *const gpon_proc_files[] = { "status", "counters", "flows", "ploam" };
 
 typedef long (*gpon_read_fn)(const char *path, char *buf, unsigned long cap);
 typedef long (*gpon_omcicli_fn)(char *buf, unsigned long cap);
@@ -473,6 +475,7 @@ static void gpon_provision_scrape(const struct prov_out *o, gpon_read_fn rd,
 	if (gpon_proc_load(rd, buf, cap) > 0) {
 		prov_emit_tconts(o, buf);
 		link_emit(o, buf);
+		flow_emit(o, buf);
 	}
 	if (!omci_ok)
 		return;

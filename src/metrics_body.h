@@ -1019,7 +1019,7 @@ static int emit_omci_metrics(int fd)
  * and both sources). The T-CONTs come from /proc/odi_gpon/status, a read; the
  * rest from `omcicli provision`, one more short fork under the same bound as
  * `dump srvflow`, and only when that one answered. The same read of
- * /proc/odi_gpon/ (src/gpon_link.h: status, counters, ploam) gives the link
+ * /proc/odi_gpon/ (src/gpon_link.h: status, counters, flows, ploam) gives the link
  * counters and times. Every file is optional: on the stock firmware none of
  * them exists, and only the metrics from the missing ones are skipped.
  */
@@ -1037,11 +1037,14 @@ static long omcicli_provision(char *buf, unsigned long cap)
 
 static void emit_provision_metrics(int fd, int omci_ok)
 {
-	/* The three /proc/odi_gpon/ files are about 4.7 KB together with the
-	 * link counters and a full PLOAM ring (test/fixtures/odi_gpon-*);
-	 * the ring is last and read by nothing here, so a short read would
-	 * cost it first. The provision answer of the ISP1 session is 0.6 KB. */
-	char buf[8192];
+	/* The four /proc/odi_gpon/ files are about 4.7 KB together with the
+	 * link counters and a full PLOAM ring (test/fixtures/odi_gpon-*), and
+	 * the flows file adds about 0.1 KB a flow (6 downstream and 5 upstream
+	 * on ISP1; all 128 the driver can hold would be 13 KB). The ring is
+	 * last and read by nothing here, so a short read would cost it first,
+	 * and a line cut by one is ignored (src/gpon_flow.h). The provision
+	 * answer of the ISP1 session is 0.6 KB. */
+	char buf[16384];
 	struct prov_out o;
 
 	o.put = prov_put_fd;

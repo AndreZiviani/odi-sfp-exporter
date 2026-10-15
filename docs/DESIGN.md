@@ -40,7 +40,7 @@ src/metricsd.c        the exporter: socket, accept loop, HTTP response
 src/metrics_body.h    the metrics themselves; every metric name lives here, except gpon_provision_*
                       and the GPON link families
 src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
-src/gpon_link.h       the GPON link families from /proc/odi_gpon, pure text in and out
+src/gpon_link.h       the GPON link families from /proc/odi_gpon/, pure text in and out
 src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
 src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
 src/start.S           _start and a 6-argument syscall stub for setsockopt

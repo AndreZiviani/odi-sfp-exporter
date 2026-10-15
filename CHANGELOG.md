@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- BREAKING: the GPON metrics read odi-oss `/proc/odi_gpon/status`,
+  `counters` and `ploam` (odi-oss split the old `/proc/odi_gpon` file into
+  that directory, same line formats), so this metricsd needs an odi-oss
+  kernel with the split, and an odi-oss kernel with the split needs this
+  metricsd. A pair that does not match loses the `gpon_provision_tcont*`
+  and GPON link metrics, nothing else. Each file is optional: on the stock
+  firmware, which has no `/proc/odi_gpon`, nothing changes (no detection;
+  a missing file only skips the metrics from it, and every `diag` and
+  `omcicli` metric is emitted as before). Test: a scrape with none of the
+  files present (`test/test_gpon_link.c`). Refs #92 (groundwork).
+
 ## v1.4.1 (2026-10-14)
 
 - GPON link metrics: a total of 11 digits or more (10000000000 and up) was

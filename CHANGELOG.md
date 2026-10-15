@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Host port and safe-mode metrics, from the files an odi-oss image with
+  `HOST_AUTONEG` and the safe mode keeps (`/var/run/host-autoneg`,
+  `/var/run/safe-mode`, `/etc/config/safe-mode`, the `odi_switch.host_link`
+  parameter): `gpon_host_autoneg{state="running|setting"}` (1 negotiating,
+  0 forced 1000BASE-X), `gpon_host_link_up`, `gpon_host_autoneg_fallback`,
+  `gpon_host_autoneg_trial`, `gpon_host_autoneg_watch`, `gpon_safe_mode`
+  and `gpon_safe_mode_unacknowledged`. Nothing is emitted without the state
+  file (an older image, the stock firmware). Alerts: `OdiSafeModeBoot`
+  (critical: the PON is off and the default password in force for that
+  boot), `OdiSafeModeUnacknowledged` and `OdiHostLinkFallback`, with
+  promtool tests. `src/host_link.h`, tested natively
+  (`test/test_host_link.c`).
+  The alert texts describe the safe-mode trigger as power cycles cut before
+  the stick had been up a minute (about 60 to 110 s after power-on, as
+  measured on hardware), not power-ups shorter than a minute.
+
 - `gpon_gem_frames_total{direction,gem_port}`, `gpon_gem_bytes_total` and
   `gpon_gem_eth_frames_total{direction,gem_port,kind="rx|fwd|tx"}`: what each
   GEM port has carried, downstream and upstream, from the new odi-oss

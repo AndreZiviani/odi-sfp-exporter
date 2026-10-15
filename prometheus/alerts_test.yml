@@ -43,8 +43,17 @@ tests:
         values: '0x60'
       - series: 'gpon_uncommitted{job="odi",instance="s1"}'
         values: '0x60'
+      - series: 'gpon_safe_mode{job="odi",instance="s1"}'
+        values: '0x60'
+      - series: 'gpon_safe_mode_unacknowledged{job="odi",instance="s1"}'
+        values: '0x60'
+      - series: 'gpon_host_autoneg_fallback{job="odi",instance="s1"}'
+        values: '0x60'
     alert_rule_test:
       - {eval_time: 60m, alertname: OdiUncommittedImage, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiSafeModeBoot, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
+      - {eval_time: 60m, alertname: OdiHostLinkFallback, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiExporterDown, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiExporterAbsent, exp_alerts: []}
       - {eval_time: 60m, alertname: OdiOnuNotOperational, exp_alerts: []}
@@ -451,3 +460,53 @@ tests:
                 Downstream FEC codewords the ONU could not correct have been
                 arriving for 10 minutes: data is being lost on the fibre.
                 Check gpon_rx_power_dbm and clean or inspect the connectors.
+
+  # A safe-mode boot: critical after a minute. Then a normal boot with the
+  # record left: the boot alert clears, the unacknowledged one fires after
+  # 30 minutes, and goes once acknowledged. A stick whose image has no safe
+  # mode (no series) never fires.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_safe_mode{job="odi",instance="s1"}'
+        values: '1x20 0x80'
+      - series: 'gpon_safe_mode_unacknowledged{job="odi",instance="s1"}'
+        values: '1x80 0x20'
+      - series: 'gpon_exporter_up{job="odi",instance="s2"}'
+        values: '1x100'
+    alert_rule_test:
+      - {eval_time: 0m, alertname: OdiSafeModeBoot, exp_alerts: []}
+      - eval_time: 5m
+        alertname: OdiSafeModeBoot
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: booted in safe mode, the PON is off"
+              description: "s1 is on a safe-mode boot: a run of power cycles, each cut before the stick had been up a minute, made it a recovery boot. For this boot the PON is off (no service through this stick), the host port runs auto-negotiation, and the web UI and root accept the default password admin. Nothing saved changed but HOST_AUTONEG, if that was off. If nobody did this on purpose, check the stick power; either way, reboot it to return to the saved configuration."
+      - {eval_time: 5m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
+      - {eval_time: 30m, alertname: OdiSafeModeBoot, exp_alerts: []}
+      - {eval_time: 40m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
+      - eval_time: 60m
+        alertname: OdiSafeModeUnacknowledged
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: a safe-mode boot was not acknowledged"
+              description: "s1 booted in safe mode earlier (a run of short power cycles) and is back on its saved configuration, but the record is still there. It may have cleared HOST_AUTONEG. Check what happened, then acknowledge it on the web UI banner."
+      - {eval_time: 90m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
+
+  # The boot fallback: a warning after 5 minutes, gone at the next boot that
+  # brings the forced link up.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_host_autoneg_fallback{job="odi",instance="s1"}'
+        values: '1x30 0x30'
+    alert_rule_test:
+      - {eval_time: 3m, alertname: OdiHostLinkFallback, exp_alerts: []}
+      - eval_time: 10m
+        alertname: OdiHostLinkFallback
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: host port fell back to auto-negotiation"
+              description: "HOST_AUTONEG is off on s1, but this boot found no host link with auto-negotiation off, so the host port runs it on. Check that the router port runs 1000 Mb/s full duplex with auto-negotiation off and try off again from the web UI, or set the host port back to on. It clears at the next boot that brings the link up with auto-negotiation off."
+      - {eval_time: 45m, alertname: OdiHostLinkFallback, exp_alerts: []}

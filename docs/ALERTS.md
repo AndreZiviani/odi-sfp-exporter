@@ -102,6 +102,9 @@ long before it crosses an absolute limit.
 | `OdiRebooted` | info | uptime under 10 min: any reboot, asked for or not |
 | `OdiMemoryLow` | warning | free + buffers + cached under 4 MiB for 10 min |
 | `OdiUncommittedImage` | warning | `gpon_uncommitted` is 1 for 30 min: a trial boot nobody committed, so the next reset boots the other slot |
+| `OdiSafeModeBoot` | critical | `gpon_safe_mode` is 1 for 1 min: a safe-mode boot, the PON off and the default password in force for that boot |
+| `OdiSafeModeUnacknowledged` | warning | a safe-mode record waits for 30 min after a normal boot: it may have cleared `HOST_AUTONEG` |
+| `OdiHostLinkFallback` | warning | `gpon_host_autoneg_fallback` is 1 for 5 min: `HOST_AUTONEG` is off but the host port runs auto-negotiation this boot |
 
 **Depends on `gpon_last_reset_reason` and `gpon_boot_count`**, which come
 from odi-oss `/proc/odi_ramlog_prev` and need both an exporter release that
@@ -121,6 +124,18 @@ committed by hand on the stick (`nv commit <slot>`, then `slot-state.sh` to
 refresh the metric). It **depends on `gpon_uncommitted`**, which needs an
 exporter release that exports it and an odi-oss image that writes
 `/var/run/odi-slot`; without both it never fires.
+
+`OdiSafeModeBoot` is critical because the stick carries no service on that
+boot (its PON is off) and accepts the default password, whether someone
+power-cycled it on purpose or its power is failing; a reboot returns it to
+the saved configuration. `OdiSafeModeUnacknowledged` is the reminder after
+it: the record stays until acknowledged on the web UI banner, and the safe
+mode may have cleared `HOST_AUTONEG`. `OdiHostLinkFallback` means the stick
+is reachable but not in the host port mode it was set to. All three
+**depend on `gpon_safe_mode`, `gpon_safe_mode_unacknowledged` and
+`gpon_host_autoneg_fallback`**, which need an exporter release that exports
+them and an odi-oss image with `HOST_AUTONEG` and the safe mode; without
+both they never fire.
 
 ### Config
 
@@ -171,6 +186,7 @@ the one the sticks are scraped into). Three things to set after the import:
   | OdiResetLoop | 203 Reboots (range) |
   | OdiMemoryLow | 500 Memory |
   | OdiUncommittedImage | 204 Image / Firmware / Exporter |
+  | OdiSafeModeBoot, OdiSafeModeUnacknowledged, OdiHostLinkFallback | (no panel yet) |
   | odi-exporter group | 205 Exporter Health |
 
   The Slack contact point needs a bot token (not a webhook URL) for Grafana

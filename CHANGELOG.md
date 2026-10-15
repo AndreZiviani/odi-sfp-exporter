@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Dashboard: the pre-FEC bit error rate estimate is shown in scientific
+  notation with one decimal (was ten decimals).
+
 - Dashboard `grafana/gpon-stats.json`: panels for the v1.5.0 metrics. A
   "Host port & safe mode" row on the Overview tab (host link up, safe-mode
   boot, safe-mode record unacknowledged, host port auto-negotiation running

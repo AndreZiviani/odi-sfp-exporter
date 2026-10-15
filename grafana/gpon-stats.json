@@ -4136,7 +4136,7 @@
               },
               "fieldConfig": {
                 "defaults": {
-                  "unit": "sci",
+                  "unit": "none",
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [

@@ -330,6 +330,15 @@ int main(void)
 	    "gpon_onu_state_seconds_total{state=\"O5\"} 86400.000\n");
 	has("a total past 2^32", "ctr ds_gem_idle 4843967295\n",
 	    "gpon_ds_gem_frames_total{kind=\"idle\"} 4843967295\n");
+	has("a total of 12 digits", "ctr ds_gem_idle 810127539369\n",
+	    "gpon_ds_gem_frames_total{kind=\"idle\"} 810127539369\n");
+	has("upstream bytes past 10 digits", "ctr us_gem_bytes 10648444509\n",
+	    "gpon_us_gem_bytes_total 10648444509\n");
+	has("the largest 64-bit total", "ctr ds_gem_idle 18446744073709551615\n",
+	    "gpon_ds_gem_frames_total{kind=\"idle\"} 18446744073709551615\n");
+	has("milliseconds past 2^32", "onu_state_ms O5 4320000000\n",
+	    "gpon_onu_state_seconds_total{state=\"O5\"} 4320000.000\n");
+	nothing("21 digits, more than a 64-bit total", "ctr ds_gem_idle 184467440737095516150\n");
 	has("the PLOAM pair, ds", "ploam ds_rx 120 us_tx 40\n",
 	    "gpon_ploam_messages_total{direction=\"ds\"} 120\n");
 	has("the PLOAM pair, us", "ploam ds_rx 120 us_tx 40\n",

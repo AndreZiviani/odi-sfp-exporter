@@ -14,6 +14,9 @@
   boot), `OdiSafeModeUnacknowledged` and `OdiHostLinkFallback`, with
   promtool tests. `src/host_link.h`, tested natively
   (`test/test_host_link.c`).
+  The alert texts describe the safe-mode trigger as power cycles cut before
+  the stick had been up a minute (about 60 to 110 s after power-on, as
+  measured on hardware), not power-ups shorter than a minute.
 
 ## v1.4.1 (2026-10-14)
 

@@ -481,7 +481,7 @@ tests:
           - exp_labels: {severity: critical, job: odi, instance: s1}
             exp_annotations:
               summary: "s1: booted in safe mode, the PON is off"
-              description: "s1 is on a safe-mode boot: a run of power-ups shorter than a minute each made it a recovery boot. For this boot the PON is off (no service through this stick), the host port runs auto-negotiation, and the web UI and root accept the default password admin. Nothing saved changed but HOST_AUTONEG, if that was off. If nobody did this on purpose, check the stick power; either way, reboot it to return to the saved configuration."
+              description: "s1 is on a safe-mode boot: a run of power cycles, each cut before the stick had been up a minute, made it a recovery boot. For this boot the PON is off (no service through this stick), the host port runs auto-negotiation, and the web UI and root accept the default password admin. Nothing saved changed but HOST_AUTONEG, if that was off. If nobody did this on purpose, check the stick power; either way, reboot it to return to the saved configuration."
       - {eval_time: 5m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
       - {eval_time: 30m, alertname: OdiSafeModeBoot, exp_alerts: []}
       - {eval_time: 40m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
@@ -491,7 +491,7 @@ tests:
           - exp_labels: {severity: warning, job: odi, instance: s1}
             exp_annotations:
               summary: "s1: a safe-mode boot was not acknowledged"
-              description: "s1 booted in safe mode earlier (a run of short power-ups) and is back on its saved configuration, but the record is still there. It may have cleared HOST_AUTONEG. Check what happened, then acknowledge it on the web UI banner."
+              description: "s1 booted in safe mode earlier (a run of short power cycles) and is back on its saved configuration, but the record is still there. It may have cleared HOST_AUTONEG. Check what happened, then acknowledge it on the web UI banner."
       - {eval_time: 90m, alertname: OdiSafeModeUnacknowledged, exp_alerts: []}
 
   # The boot fallback: a warning after 5 minutes, gone at the next boot that

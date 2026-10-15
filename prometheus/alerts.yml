@@ -408,9 +408,10 @@ groups:
             slot-state.sh; otherwise reboot it back.
 
       # A safe-mode boot: odi-oss entered its recovery boot after a run of
-      # short power-ups (safe-mode.sh). For that boot the PON is off, so
-      # the stick carries no traffic, and the web UI and root accept the
-      # default password. From /var/run/safe-mode.
+      # short boots, power cycles cut before the kernel had run a minute
+      # (about 60 to 110 s after power-on; safe-mode.sh). For that boot the
+      # PON is off, so the stick carries no traffic, and the web UI and root
+      # accept the default password. From /var/run/safe-mode.
       - alert: OdiSafeModeBoot
         expr: gpon_safe_mode == 1
         for: 1m
@@ -419,9 +420,10 @@ groups:
         annotations:
           summary: "{{ $labels.instance }}: booted in safe mode, the PON is off"
           description: >-
-            {{ $labels.instance }} is on a safe-mode boot: a run of power-ups
-            shorter than a minute each made it a recovery boot. For this boot
-            the PON is off (no service through this stick), the host port
+            {{ $labels.instance }} is on a safe-mode boot: a run of power
+            cycles, each cut before the stick had been up a minute, made it a
+            recovery boot. For this boot the PON is off (no service through
+            this stick), the host port
             runs auto-negotiation, and the web UI and root accept the default
             password admin. Nothing saved changed but HOST_AUTONEG, if that
             was off. If nobody did this on purpose, check the stick power;
@@ -438,7 +440,7 @@ groups:
           summary: "{{ $labels.instance }}: a safe-mode boot was not acknowledged"
           description: >-
             {{ $labels.instance }} booted in safe mode earlier (a run of short
-            power-ups) and is back on its saved configuration, but the record
+            power cycles) and is back on its saved configuration, but the record
             is still there. It may have cleared HOST_AUTONEG. Check what
             happened, then acknowledge it on the web UI banner.
 

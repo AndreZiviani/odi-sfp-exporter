@@ -1,0 +1,2 @@
+ploam ds_rx 120 us_tx 40
+ploam_type ds 0x01 3

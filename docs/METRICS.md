@@ -159,13 +159,13 @@ timeout or failure the hash is left out, the mtime is still exported, and the
 next scrape tries again.
 
 From omcid, the odi-oss OMCI daemon, through `/bin/omcicli` (one short fork
-each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon`:
+each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon/status`:
 
 | metric | source |
 |---|---|
 | `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time; 0 is a stuck omcid, and the families below are then stale or absent |
 | `gpon_omci_services` | `omcicli dump srvflow` -- bridge connections installed; 0 at O5 is synced but not provisioned |
-| `gpon_provision_tconts` | `/proc/odi_gpon`, `alloc_ids` -- T-CONTs the OLT assigned by PLOAM (Assign_Alloc-ID) |
+| `gpon_provision_tconts` | `/proc/odi_gpon/status`, `alloc_ids` -- T-CONTs the OLT assigned by PLOAM (Assign_Alloc-ID) |
 | `gpon_provision_tcont_info{alloc_id}` | same, 1 per Alloc-ID |
 | `gpon_provision_gem_ports` | `omcicli provision` -- GEM port network CTPs the OLT created |
 | `gpon_provision_gem_port_info{gem_port,direction="upstream\|downstream\|bidirectional"}` | same, 1 per GEM port |
@@ -194,15 +194,16 @@ natively against fixtures and goldens (`test/test_provision.c`).
 
 ### The GPON link
 
-From the same read of odi-oss `/proc/odi_gpon`, no fork: the line counters of
+From the same read of odi-oss `/proc/odi_gpon/` (its files `status`,
+`counters`, `flows` and `ploam`), no fork: the line counters of
 the GPON MAC, how long each alarm and ONU state lasted, and the driver's own
 PLOAM and interrupt counts. The hardware counters clear when they are read,
 so this exporter never reads them: the odi-oss driver is their one reader,
 sampling them once a second into 64-bit totals, and these are its totals
-(odi-oss `docs/TOOLS.md`, "/proc/odi_gpon", has the lines). A degraded fibre
+(odi-oss `docs/TOOLS.md`, "/proc/odi_gpon/", has the lines). A degraded fibre
 shows here first, and so does an ONU that says O5 but is no longer served.
 
-| metric | `/proc/odi_gpon` |
+| metric | `/proc/odi_gpon/` (`counters` for `ctr*`, `ploam` for `ploam*`, `status` for the rest) |
 |---|---|
 | `gpon_ds_bip_error_blocks_total`, `gpon_ds_bip_error_bits_total` | `ctr ds_bip_err_blocks`, `ds_bip_err_bits`: downstream BIP-8 errors (the blocks are what the REI reports to the OLT) |
 | `gpon_ds_fec_corrected_bits_total`, `gpon_ds_fec_corrected_bytes_total` | `ctr ds_fec_corrected_bits`, `_bytes` |
@@ -225,6 +226,38 @@ shows here first, and so does an ONU that says O5 but is no longer served.
 
 The live LOS, LOF and LOM bits are `gpon_alarm` from `diag` above, not
 repeated here.
+
+#### Per GEM port
+
+From `/proc/odi_gpon/flows`: what each GEM flow OMCI created has carried,
+which the aggregate counters above cannot say. On a line with a second
+service (IPTV, VoIP on a GEM port of its own) a port that goes quiet shows
+here. The same one-reader rule holds: the per-flow registers clear when
+read, so the driver samples them, in the same second as the link counters
+and only for the flows that exist, and these are its 64-bit totals since the
+flow was created (a flow created again starts at zero, which `rate()` reads
+as a counter reset).
+
+| metric | `/proc/odi_gpon/flows` line and name |
+|---|---|
+| `gpon_gem_frames_total{direction="ds\|us",gem_port}` | `ds` and `us` lines, `gem_frames`: GEM frames received downstream, sent upstream |
+| `gpon_gem_bytes_total{direction,gem_port}` | `bytes` (upstream: a 64-bit count) |
+| `gpon_gem_eth_frames_total{direction,gem_port,kind="rx\|fwd\|tx"}` | `ds` `eth_rx` (kind `rx`: Ethernet frames received from the GEM layer) and `eth_fwd` (`fwd`: forwarded to the switch), `us` `eth_frames` (`tx`: sent upstream) |
+| `gpon_gem_flow_count_faults_total{kind="ack_timeout\|saturated"}` | `flow_ack_timeouts`, `flow_saturated`: counts the driver could not read in time, or read full |
+
+The series are labelled by direction and GEM port, not by the driver's flow
+index. The OMCI channel is a downstream flow (`gem_port="4095"`). Two flows
+of one direction on the same port would be one series; the first line in
+the file is kept. On one stick the downstream GEM frames, Ethernet frames
+received and Ethernet frames forwarded of a flow were equal, and the
+upstream GEM frames ran about 6.6 times the Ethernet frames.
+
+```promql
+rate(gpon_gem_bytes_total{direction="ds"}[5m]) * 8                  # bit/s per GEM port, downstream
+rate(gpon_gem_frames_total{direction="us",gem_port="1566"}[5m]) == 0  # this port sends nothing
+rate(gpon_gem_eth_frames_total{direction="ds",kind="rx"}[5m])
+  - rate(gpon_gem_eth_frames_total{direction="ds",kind="fwd"}[5m])    # frames received but not forwarded
+```
 
 ```promql
 rate(gpon_ds_fec_codewords_total{result="uncorrectable"}[5m]) > 0   # errors get through FEC
@@ -251,16 +284,26 @@ What to know before alerting on them:
   undercounts; `gpon_counter_saturated_samples_total` says when.
   `gpon_us_gem_bytes_total` is 32-bit and does not fill at line rate.
 - **Reading one of these registers by hand** (`diag register get`, `memprobe`)
-  takes its count away from the totals.
+  takes its count away from the totals. That includes the per-flow
+  registers, and the stock firmware `gpon show counter flow`.
 - Not established beyond the name the hardware gives them: the two
   `invalid` BWmap kinds, `leaked` multicast, the difference between
   `uncorrectable` and `failed` PLend (G.984.3 Table 8-a drops a frame when
   both copies fail), and `over_interleave`.
 
 Absent on a stock kernel and on an odi-oss kernel from before the counters,
-never zero. The parsing is `src/gpon_link.h`, tested natively against a
-`/proc/odi_gpon` whose counter block is odi-oss's own test golden
-(`test/test_gpon_link.c`).
+never zero. Each of the four files is optional: the stock firmware has no
+`/proc/odi_gpon` at all, and a file that cannot be read drops only the
+metrics from its lines, silently; nothing detects which image this is, and
+every `diag` and `omcicli` metric is emitted as before. An odi-oss kernel
+that still has `/proc/odi_gpon` as one file (before the split) reads the
+same as the stock one here. The parsing is `src/gpon_link.h`, tested natively
+against a `/proc/odi_gpon/` whose counters file is odi-oss's own test golden
+(`test/test_gpon_link.c`, which also runs the provision part of a scrape with
+none of the files present). The per-port metrics are `src/gpon_flow.h`, tested
+against odi-oss's own `flows` golden (`test/test_gpon_flow.c`); a kernel
+without the file, the stock firmware included, has none of them, and the
+rest is unchanged.
 
 From odi-oss `/var/run/odi-slot`, which its `slot-state.sh` writes at every
 boot from the U-Boot environment and `/proc/cmdline` (format: odi-oss

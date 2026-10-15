@@ -296,11 +296,22 @@ static void scrape_tests(void)
 	expect(strstr(out, "gpon_provision_tconts") && strstr(out, "gpon_ds_bip_error_blocks_total") &&
 	       !strstr(out, "gpon_ploam_messages_total") && strstr(out, "gpon_provision_gem_ports"),
 	       "no ploam file: only the PLOAM metrics are gone");
+	hide = "flows";
+	scrape(fake_omcicli, 1);
+	expect(strstr(out, "gpon_provision_tconts") && strstr(out, "gpon_ds_bip_error_blocks_total") &&
+	       strstr(out, "gpon_ploam_messages_total") && !strstr(out, "gpon_gem_") &&
+	       strstr(out, "gpon_provision_gem_ports"),
+	       "no flows file (an older odi-oss kernel): only the per-flow metrics are gone");
+	check_shape("scrape without flows");
 	hide = 0;
 	scrape(fake_omcicli, 1);
 	expect(strstr(out, "gpon_provision_tconts") && strstr(out, "gpon_ds_bip_error_blocks_total") &&
 	       strstr(out, "gpon_ploam_messages_total") && strstr(out, "gpon_provision_gem_ports"),
 	       "every file present: all the families");
+	expect(strstr(out, "gpon_gem_frames_total{direction=\"ds\",gem_port=\"1434\"} 20000\n") &&
+	       strstr(out, "gpon_gem_bytes_total{direction=\"us\",gem_port=\"1566\"} 4294994796\n"),
+	       "every file present: the per-flow families too");
+	check_shape("scrape with every file");
 }
 
 int main(void)

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Dashboard: the pre-FEC bit error rate estimate is shown in scientific
+  notation with one decimal (was ten decimals).
+
+- Dashboard `grafana/gpon-stats.json`: panels for the v1.5.0 metrics. A
+  "Host port & safe mode" row on the Overview tab (host link up, safe-mode
+  boot, safe-mode record unacknowledged, host port auto-negotiation running
+  against the stored setting, and fallback / trial / boot watch as state
+  timelines), and per-GEM-port panels at the end of the "GPON link detail"
+  tab (bytes/s and frames/s per port, downstream and upstream, upstream GEM
+  against Ethernet frames, and the flow count faults). On an image without
+  these metrics the panels read n.a. or stay blank, never a healthy 0.
+  `docs/ALERTS.md` links `OdiSafeModeBoot`, `OdiSafeModeUnacknowledged` and
+  `OdiHostLinkFallback` to their panels (721, 722, 713).
+
 ## v1.5.0 (2026-10-15)
 
 - Host port and safe-mode metrics, from the files an odi-oss image with

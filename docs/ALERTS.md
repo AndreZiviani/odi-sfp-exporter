@@ -186,7 +186,9 @@ the one the sticks are scraped into). Three things to set after the import:
   | OdiResetLoop | 203 Reboots (range) |
   | OdiMemoryLow | 500 Memory |
   | OdiUncommittedImage | 204 Image / Firmware / Exporter |
-  | OdiSafeModeBoot, OdiSafeModeUnacknowledged, OdiHostLinkFallback | (no panel yet) |
+  | OdiSafeModeBoot | 721 Safe-mode boot |
+  | OdiSafeModeUnacknowledged | 722 Safe-mode record unacknowledged |
+  | OdiHostLinkFallback | 713 Host port: fallback, trial and boot watch |
   | odi-exporter group | 205 Exporter Health |
 
   The Slack contact point needs a bot token (not a webhook URL) for Grafana

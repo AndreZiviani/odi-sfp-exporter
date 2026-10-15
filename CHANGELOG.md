@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Host port and safe-mode metrics, from the files an odi-oss image with
+  `HOST_AUTONEG` and the safe mode keeps (`/var/run/host-autoneg`,
+  `/var/run/safe-mode`, `/etc/config/safe-mode`, the `odi_switch.host_link`
+  parameter): `gpon_host_autoneg{state="running|setting"}` (1 negotiating,
+  0 forced 1000BASE-X), `gpon_host_link_up`, `gpon_host_autoneg_fallback`,
+  `gpon_host_autoneg_trial`, `gpon_host_autoneg_watch`, `gpon_safe_mode`
+  and `gpon_safe_mode_unacknowledged`. Nothing is emitted without the state
+  file (an older image, the stock firmware). Alerts: `OdiSafeModeBoot`
+  (critical: the PON is off and the default password in force for that
+  boot), `OdiSafeModeUnacknowledged` and `OdiHostLinkFallback`, with
+  promtool tests. `src/host_link.h`, tested natively
+  (`test/test_host_link.c`).
+
 ## v1.4.1 (2026-10-14)
 
 - GPON link metrics: a total of 11 digits or more (10000000000 and up) was

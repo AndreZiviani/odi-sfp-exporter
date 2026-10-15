@@ -280,6 +280,34 @@ at boot and again when `slot-state.sh` is run by hand, which is what to do
 after `nv commit` so `gpon_uncommitted` drops without a reboot.
 `OdiUncommittedImage` (docs/ALERTS.md) fires on it.
 
+The host-port auto-negotiation (`HOST_AUTONEG`) and the safe mode, from the
+files odi-oss keeps for them (odi-oss `docs/TOOLS.md`, "host-autoneg.sh" and
+"safe-mode.sh"; `docs/SETTINGS.md` says what each state means): the state
+of this boot `/var/run/host-autoneg`, the safe-mode flag `/var/run/safe-mode`
+and its record `/etc/config/safe-mode`, and the live link from
+`/sys/module/odi_switch/parameters/host_link`. Small files, no fork:
+
+| metric | meaning |
+|---|---|
+| `gpon_host_autoneg{state="running"}` | 1 when the host port negotiates 1000BASE-X with the host, 0 when it runs forced 1000BASE-X full duplex |
+| `gpon_host_autoneg{state="setting"}` | the stored `HOST_AUTONEG`: 1 on (or unset), 0 off |
+| `gpon_host_link_up` | 1 while the host port has a link |
+| `gpon_host_autoneg_fallback` | 1 when `HOST_AUTONEG` is off but this boot found no link forced and runs auto-negotiation (the boot fallback) |
+| `gpon_host_autoneg_trial` | 1 while a keep-or-revert trial of the mode runs (it reverts by itself unless confirmed) |
+| `gpon_host_autoneg_watch` | 1 while the boot watch is still deciding the mode (up to 10 minutes after a boot with the key off) |
+| `gpon_safe_mode` | 1 on a safe-mode boot: the PON off, the host port on auto-negotiation, the default password, for that boot only |
+| `gpon_safe_mode_unacknowledged` | 1 while the record of a safe-mode boot waits to be acknowledged |
+
+The state file is what says the image has these features: without it (an
+older image, the stock firmware) none of them is emitted, `gpon_safe_mode`
+included, so a missing series never reads as "checked, not in safe mode". A
+value the file does not define omits its series; `gpon_host_link_up` needs
+the kernel parameter. A safe-mode boot keeps the PON off, so on that boot
+every GPON series reads as a stick with no line: `gpon_safe_mode` is the
+reason. `OdiSafeModeBoot`, `OdiSafeModeUnacknowledged` and
+`OdiHostLinkFallback` (docs/ALERTS.md) fire on them. The rendering is
+`src/host_link.h`, tested natively (`test/test_host_link.c`).
+
 Plus three health gauges:
 
 | metric | meaning |

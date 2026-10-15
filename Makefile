@@ -57,7 +57,7 @@ endif
 
 LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
 
-HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/slot_state.h src/provision.h
+HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/slot_state.h src/host_link.h src/provision.h
 
 # BUILD_ID is compiled in, but it is a make VARIABLE -- make cannot see it
 # change, so with the sources untouched it will not rebuild and the binary keeps
@@ -109,7 +109,7 @@ httpd: image
 
 # src/wrap.h (the octet-counter wraparound logic), src/resetinfo.h (the
 # /proc/odi_ramlog_prev parse), src/confighash.h (the md5sum parse and stat
-# comparison behind gpon_config_info), src/slot_state.h, src/provision.h and
+# comparison behind gpon_config_info), src/slot_state.h, src/host_link.h, src/provision.h and
 # the mib_* tables in src/metrics_body.h have no MIPS-specific code, so they
 # are tested with the HOST compiler -- no Docker, no qemu-user. The
 # test_*.c files are real unit tests; test_metrics.sh is a fixture check on
@@ -120,7 +120,7 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_provision test_gpon_link; do \
+	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_provision test_gpon_link; do \
 		t=$$(mktemp); \
 		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
 		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \

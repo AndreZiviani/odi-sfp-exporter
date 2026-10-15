@@ -407,6 +407,59 @@ groups:
             is checked, commit it on the stick with nv commit <slot> and
             slot-state.sh; otherwise reboot it back.
 
+      # A safe-mode boot: odi-oss entered its recovery boot after a run of
+      # short power-ups (safe-mode.sh). For that boot the PON is off, so
+      # the stick carries no traffic, and the web UI and root accept the
+      # default password. From /var/run/safe-mode.
+      - alert: OdiSafeModeBoot
+        expr: gpon_safe_mode == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: booted in safe mode, the PON is off"
+          description: >-
+            {{ $labels.instance }} is on a safe-mode boot: a run of power-ups
+            shorter than a minute each made it a recovery boot. For this boot
+            the PON is off (no service through this stick), the host port
+            runs auto-negotiation, and the web UI and root accept the default
+            password admin. Nothing saved changed but HOST_AUTONEG, if that
+            was off. If nobody did this on purpose, check the stick power;
+            either way, reboot it to return to the saved configuration.
+
+      # A safe-mode boot happened and nobody acknowledged it on the web UI
+      # (or with safe-mode.sh ack). The stick runs normally again.
+      - alert: OdiSafeModeUnacknowledged
+        expr: gpon_safe_mode_unacknowledged == 1 and gpon_safe_mode == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: a safe-mode boot was not acknowledged"
+          description: >-
+            {{ $labels.instance }} booted in safe mode earlier (a run of short
+            power-ups) and is back on its saved configuration, but the record
+            is still there. It may have cleared HOST_AUTONEG. Check what
+            happened, then acknowledge it on the web UI banner.
+
+      # The boot fallback: HOST_AUTONEG is off, but this boot found no host
+      # link with auto-negotiation off and runs it on instead. The stick is
+      # reachable, but not in the mode it was set to.
+      - alert: OdiHostLinkFallback
+        expr: gpon_host_autoneg_fallback == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: host port fell back to auto-negotiation"
+          description: >-
+            HOST_AUTONEG is off on {{ $labels.instance }}, but this boot found
+            no host link with auto-negotiation off, so the host port runs it
+            on. Check that the router port runs 1000 Mb/s full duplex with
+            auto-negotiation off and try off again from the web UI, or set
+            the host port back to on. It clears at the next boot that brings
+            the link up with auto-negotiation off.
+
   - name: odi-config
     rules:
       # A new hash is a new series for the same file, so two series for one

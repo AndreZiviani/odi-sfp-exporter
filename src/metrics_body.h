@@ -19,6 +19,7 @@
 #include "resetinfo.h"
 #include "confighash.h"
 #include "slot_state.h"
+#include "host_link.h"
 #include "provision.h"
 #include "gpon_link.h"
 
@@ -1386,6 +1387,29 @@ static void metric_slot_state(int fd)
 		write_all(fd, out, n);
 }
 
+/*
+ * The host-port auto-negotiation and the safe mode, from the files odi-oss
+ * keeps (src/host_link.h has the format and the rendering). tmpfs files of
+ * a few hundred bytes, a config-partition record and a sysfs parameter: no
+ * read can block, and the buffers bound them. No state file, nothing.
+ */
+static void metric_host_link(int fd)
+{
+	char st[1024], tmp[256], link[8], out[2048];
+	unsigned long n;
+	int now, rec;
+
+	if (read_file(HOST_AUTONEG_STATE_PATH, st, sizeof(st)) <= 0)
+		return;
+	now = read_file(SAFE_MODE_FLAG_PATH, tmp, sizeof(tmp)) >= 0;
+	rec = read_file(SAFE_MODE_RECORD_PATH, tmp, sizeof(tmp)) >= 0;
+	if (read_file(HOST_LINK_PATH, link, sizeof(link)) <= 0)
+		link[0] = 0;
+	n = host_link_render(st, now, rec, link[0] ? link : 0, out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
+}
+
 static void emit_metrics(int fd)
 {
 	put_fd(fd, "# HELP gpon_exporter_up Always 1. Confirms the exporter ran.\n"
@@ -1395,6 +1419,7 @@ static void emit_metrics(int fd)
 	metric_build_info(fd);
 	metric_image_info(fd);
 	metric_slot_state(fd);
+	metric_host_link(fd);
 	metric_uptime(fd);
 	metric_reset_info(fd);
 	metric_loadavg(fd);

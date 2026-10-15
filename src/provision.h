@@ -8,7 +8,7 @@
  *
  * Two sources, neither of them a new transport:
  *
- *  - /proc/odi_gpon, its `alloc_ids <n> <id>...` line: the Alloc-IDs the OLT
+ *  - /proc/odi_gpon/status, its `alloc_ids <n> <id>...` line: the Alloc-IDs the OLT
  *    assigned by PLOAM (Assign_Alloc-ID), from the odi-oss kernel driver. A
  *    read of a /proc file, no fork. These are the T-CONTs.
  *  - `omcicli provision`, one short fork like `omcicli dump srvflow`, bounded

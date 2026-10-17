@@ -183,4 +183,183 @@ static void xcvr_emit(const struct prov_out *o, const char *sec)
 	prov_puts(o, "gpon_transceiver_up 1\n");
 }
 
+/*
+ * The module's limits and calibration, from two more commands of the odi-oss
+ * diag (`pon get transceiver limits`, `monitoring-type`), read from the module
+ * itself and fixed for its life, so a few lines each:
+ *
+ *     Rx Power alarm low: -30.000000  dBm
+ *     Temperature warning high: 90.000000 C
+ *
+ *     Monitoring type: 0x68
+ *     Digital diagnostics: implemented
+ *     Calibration: internal
+ *     Rx power type: average
+ *
+ * gpon_transceiver_limit{measure,level,side} carries the limit in the unit of
+ * the matching reading (Celsius, volts, mA, dBm): the line to draw next to
+ * gpon_rx_power_dbm and the others. A limit that is not a plain decimal (the
+ * module stores 0 for a limit it does not use, which reads "-inf" in dBm) is
+ * skipped. gpon_transceiver_monitoring_info{diagnostics,calibration,
+ * rx_power_type} is 1, from a fixed vocabulary of words (anything else drops
+ * the series): the conversions of the diag assume internal calibration, and
+ * this is where that stops being an assumption. Nothing when the diag does
+ * not know the commands or the read failed.
+ */
+static int xcvr_word_in(const char *w, unsigned long n, const char *const *list)
+{
+	unsigned long i, k;
+
+	for (i = 0; list[i]; i++) {
+		for (k = 0; k < n && list[i][k] == w[k]; k++)
+			;
+		if (k == n && !list[i][k])
+			return 1;
+	}
+	return 0;
+}
+
+/* The text after "key" in the line, trimmed of a trailing CR/space; 0 when
+ * the line does not start with key. */
+static int xcvr_after(const char *l, unsigned long n, const char *key,
+		      const char **v, unsigned long *vn)
+{
+	unsigned long k = 0;
+
+	while (key[k] && k < n && l[k] == key[k])
+		k++;
+	if (key[k])
+		return 0;
+	*v = l + k;
+	*vn = n - k;
+	while (*vn && ((*v)[*vn - 1] == '\r' || (*v)[*vn - 1] == ' '))
+		(*vn)--;
+	return *vn > 0;
+}
+
+static void xcvr_emit_monitor(const struct prov_out *o, const char *sec)
+{
+	static const char *const diag[] = { "implemented", "not implemented", 0 };
+	static const char *const cal[] = { "internal", "external", "internal and external", "none", 0 };
+	static const char *const rxt[] = { "average", "OMA", 0 };
+	const char *dv = 0, *cv = 0, *rv = 0;
+	unsigned long dn = 0, cn = 0, rn = 0, i = 0, k;
+
+	while (sec[i]) {
+		unsigned long n = prov_line_end(sec + i);
+
+		xcvr_after(sec + i, n, "Digital diagnostics: ", &dv, &dn);
+		xcvr_after(sec + i, n, "Calibration: ", &cv, &cn);
+		xcvr_after(sec + i, n, "Rx power type: ", &rv, &rn);
+		i += n;
+		if (sec[i])
+			i++;
+	}
+	if (!dv || !cv || !rv || !xcvr_word_in(dv, dn, diag) ||
+	    !xcvr_word_in(cv, cn, cal) || !xcvr_word_in(rv, rn, rxt))
+		return;
+	prov_header(o, "gpon_transceiver_monitoring_info",
+		    "Always 1. How the module says its diagnostics work (SFF-8472 A0h "
+		    "byte 92). The conversions of the readings assume calibration "
+		    "internal; with another value they may be wrong.");
+	prov_puts(o, "gpon_transceiver_monitoring_info{diagnostics=\"");
+	for (k = 0; k < dn; k++) {
+		char c = dv[k] == ' ' ? '_' : dv[k];
+
+		prov_putn(o, &c, 1);
+	}
+	prov_puts(o, "\",calibration=\"");
+	for (k = 0; k < cn; k++) {
+		char c = cv[k] == ' ' ? '_' : cv[k];
+
+		prov_putn(o, &c, 1);
+	}
+	prov_puts(o, "\",rx_power_type=\"");
+	for (k = 0; k < rn; k++) {
+		char c = rv[k] >= 'A' && rv[k] <= 'Z' ? (char)(rv[k] - 'A' + 'a') : rv[k];
+
+		prov_putn(o, &c, 1);
+	}
+	prov_puts(o, "\"} 1\n");
+}
+
+/* A value "[-]d.d" followed by a space and a unit or the end: its length, 0
+ * when it is not a plain decimal. */
+static unsigned long xcvr_decimal(const char *v, unsigned long n)
+{
+	unsigned long i = 0, d = 0, f = 0;
+
+	if (i < n && v[i] == '-')
+		i++;
+	while (i < n && v[i] >= '0' && v[i] <= '9') {
+		i++;
+		d++;
+	}
+	if (!d || i >= n || v[i] != '.')
+		return 0;
+	i++;
+	while (i < n && v[i] >= '0' && v[i] <= '9') {
+		i++;
+		f++;
+	}
+	if (!f || (i < n && v[i] != ' '))
+		return 0;
+	return i;
+}
+
+static void xcvr_emit_limits(const struct prov_out *o, const char *sec)
+{
+	static const char *const measure[] = {
+		"Temperature ", "Voltage ", "Bias Current ", "Tx Power ", "Rx Power ", 0 };
+	static const char *const mname[] = {
+		"temperature", "voltage", "bias_current", "tx_power", "rx_power" };
+	static const char *const lvl[] = {
+		"alarm high: ", "alarm low: ", "warning high: ", "warning low: ", 0 };
+	static const char *const lname[] = {
+		"alarm\",side=\"high", "alarm\",side=\"low", "warning\",side=\"high",
+		"warning\",side=\"low" };
+	int header = 0, m, l;
+
+	for (m = 0; measure[m]; m++) {
+		for (l = 0; lvl[l]; l++) {
+			unsigned long i = 0;
+			char key[32];
+			unsigned long a = 0, b = 0;
+
+			while (measure[m][a])
+				key[a] = measure[m][a], a++;
+			while (lvl[l][b])
+				key[a + b] = lvl[l][b], b++;
+			key[a + b] = 0;
+			while (sec[i]) {
+				unsigned long n = prov_line_end(sec + i);
+				const char *v;
+				unsigned long vn, dl;
+
+				if (xcvr_after(sec + i, n, key, &v, &vn) &&
+				    (dl = xcvr_decimal(v, vn)) != 0) {
+					if (!header) {
+						prov_header(o, "gpon_transceiver_limit",
+							    "The module own alarm and warning limit for "
+							    "a reading, in that reading unit (C, V, mA, "
+							    "dBm), from SFF-8472 A2h 0-39. The module "
+							    "raises gpon_transceiver_alarm against these.");
+						header = 1;
+					}
+					prov_puts(o, "gpon_transceiver_limit{measure=\"");
+					prov_puts(o, mname[m]);
+					prov_puts(o, "\",level=\"");
+					prov_puts(o, lname[l]);
+					prov_puts(o, "\"} ");
+					prov_putn(o, v, dl);
+					prov_puts(o, "\n");
+				}
+				i += n;
+				if (sec[i])
+					i++;
+			}
+		}
+	}
+}
+
 #endif /* ODI_TRANSCEIVER_H */

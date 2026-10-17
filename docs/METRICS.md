@@ -20,6 +20,8 @@ From `/bin/diag`, **all in a single fork per scrape**:
 | `gpon_transceiver_alarm{kind="alarm\|warning",condition="..."}` | `diag pon get transceiver alarm-status` — the module's own flags, see below |
 | `gpon_transceiver_rx_los` | same — the module's optical LOS bit (A2h byte 110 bit 1) |
 | `gpon_transceiver_up` | same — 1 when the module answered on I2C, 0 when the read failed |
+| `gpon_transceiver_limit{measure,level,side}` | `diag pon get transceiver limits` — the module's own limits, see below |
+| `gpon_transceiver_monitoring_info{diagnostics,calibration,rx_power_type}` | `diag pon get transceiver monitoring-type` — always 1, see below |
 | `gpon_port_{receive,transmit}_octets_total{port="..."}` | `diag mib dump counter port all` — **the throughput metric**, see below |
 | `gpon_port_{receive,transmit}_packets_total{port,kind="unicast\|multicast\|broadcast"}` | same |
 | `gpon_port_{receive,transmit}_drops_total{port}` | same |
@@ -42,6 +44,16 @@ absent in that case, which is the only place that says why. Nothing is
 emitted when the diag does not know the command (the stock firmware, an
 older odi-oss), so absent means "cannot say", not "fine". `src/transceiver.h`,
 tested natively (`test/test_transceiver.c`).
+
+`gpon_transceiver_limit{measure,level,side}` is the module's own limit for a
+reading (`measure` is `temperature`, `voltage`, `bias_current`, `tx_power` or
+`rx_power`; `level` `alarm` or `warning`; `side` `high` or `low`), in the unit
+of that reading, from A2h bytes 0-39: draw it next to `gpon_rx_power_dbm`. A
+limit the module stores as 0 and that reads `-inf` in dBm is skipped.
+`gpon_transceiver_monitoring_info{diagnostics,calibration,rx_power_type}` is
+A0h byte 92: the conversions of the five readings assume `calibration="internal"`,
+and `OdiTransceiverCalibration` says when a module claims otherwise. Both need
+an odi-oss diag with `pon get transceiver limits` and `monitoring-type`.
 
 **`port="2"` is the PON side and `port="0"` the host SerDes side.** These are
 the only counters that show whether the stick is actually *forwarding*, so they

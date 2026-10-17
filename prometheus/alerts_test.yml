@@ -571,3 +571,23 @@ tests:
                 module on its I2C port failed for 5 minutes. The optics
                 alerts cannot fire while this lasts.
       # s3 has no diag at all: that is OdiDiagDown, not an unreadable module.
+
+  # A module that does not calibrate internally: the readings cannot be trusted.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_transceiver_monitoring_info{job="odi",instance="s1",diagnostics="implemented",calibration="internal",rx_power_type="average"}'
+        values: '1x30'
+      - series: 'gpon_transceiver_monitoring_info{job="odi",instance="s2",diagnostics="implemented",calibration="external",rx_power_type="average"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OdiTransceiverCalibration
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s2, diagnostics: implemented, calibration: external, rx_power_type: average}
+            exp_annotations:
+              summary: "s2: module calibration is external"
+              description: >-
+                The module says its diagnostics are implemented and its
+                calibration external. The optical readings assume internal
+                calibration, so they may be wrong on this stick.
+

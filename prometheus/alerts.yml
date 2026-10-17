@@ -370,6 +370,24 @@ groups:
             The transceiver module reports the {{ $labels.condition }}
             warning, the inner limit stored in the module, for 30 minutes.
 
+      # The conversions of the readings assume a module that calibrates
+      # internally (SFF-8472 A0h byte 92). One that says otherwise reads
+      # wrong, silently: the diag does not apply external calibration.
+      - alert: OdiTransceiverCalibration
+        expr: |
+          gpon_transceiver_monitoring_info{calibration!="internal"}
+          or
+          gpon_transceiver_monitoring_info{diagnostics!="implemented"}
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: module calibration is {{ $labels.calibration }}"
+          description: >-
+            The module says its diagnostics are {{ $labels.diagnostics }} and
+            its calibration {{ $labels.calibration }}. The optical readings
+            assume internal calibration, so they may be wrong on this stick.
+
       # All five optical readings vanish when the I2C read fails, and every
       # optics alert above is a threshold on them: this is the one that says
       # the module cannot be read, while the ONU is up.

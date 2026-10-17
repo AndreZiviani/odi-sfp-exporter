@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.6.0 (2026-10-17)
+
 - The Grafana dashboard title no longer names a stick make ("ODI XPON SoC and
   GPON signal metrics"). No OLT or ONT make is named in this repository.
   Refs odi-oss#114

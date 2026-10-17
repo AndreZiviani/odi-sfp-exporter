@@ -22,6 +22,7 @@
 #include "host_link.h"
 #include "provision.h"
 #include "gpon_link.h"
+#include "transceiver.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -809,6 +810,21 @@ static void metric_port_mib(int fd, const char *buf)
 	}
 }
 
+/* The module alarm section of the diag scrape: src/transceiver.h renders it. */
+static void prov_put_fd(void *ctx, const char *s, unsigned long n)
+{
+	write_all(*(int *)ctx, s, n);
+}
+
+static void metric_transceiver(int fd, const char *sec)
+{
+	struct prov_out o;
+
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	xcvr_emit(&o, sec);
+}
+
 /*
  * One diag invocation per scrape.
  *
@@ -853,6 +869,7 @@ static const struct diag_sec diag_secs[] = {
 	  "Temperature of the GPON transceiver, in Celsius.", scan_decimal, 0 },
 	{ "pon get transceiver voltage", "gpon_voltage_volts",
 	  "Supply voltage of the GPON transceiver, in Volts.", scan_decimal, 0 },
+	{ "pon get transceiver alarm-status", 0, 0, 0, metric_transceiver },
 	{ "gpon get onu-state", "gpon_onu_state",
 	  "ONU state number, the N in O(N). 5 is operational.", scan_onu_state, 0 },
 	{ "gpon get alarm-status", 0, 0, 0, metric_alarms },
@@ -1024,11 +1041,6 @@ static int emit_omci_metrics(int fd)
  * counters and times. Every file is optional: on the stock firmware none of
  * them exists, and only the metrics from the missing ones are skipped.
  */
-static void prov_put_fd(void *ctx, const char *s, unsigned long n)
-{
-	write_all(*(int *)ctx, s, n);
-}
-
 static long omcicli_provision(char *buf, unsigned long cap)
 {
 	static char *const argv[] = { "omcicli", "provision", 0 };

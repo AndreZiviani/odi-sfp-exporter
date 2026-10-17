@@ -97,7 +97,7 @@ value and there is nothing to extend. The problem is that "correctly
 matched" is not guaranteed: `rc35` prefers an `/etc/config/metricsd`
 override over the image's own `/bin/metricsd`, so an exporter build can end
 up paired with an older kernel that still reports these as plain 32-bit
-registers wrapping at 4.29 GB — observed on stick `vero`. Three designs were
+registers wrapping at 4.29 GB — observed on a live stick. Three designs were
 available:
 
 1. **Trust the register width and do nothing.** Correct once every fielded

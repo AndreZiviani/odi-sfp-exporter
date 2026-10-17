@@ -124,10 +124,13 @@ groups:
           summary: "{{ $labels.instance }}: GPON alarm {{ $labels.alarm }}"
           description: >-
             {{ $labels.alarm }} has been asserted for 5 minutes. sf and sd
-            are the OLT-side signal fail and signal degrade thresholds on
-            the downstream bit error rate. On odi-oss v1.3.0 or later the
-            counters behind it are exported too: see
-            gpon_ds_fec_codewords_total and gpon_ds_bip_error_blocks_total.
+            are signal fail and signal degrade: the ONU raises them when
+            the downstream bit error rate crosses the thresholds the OLT
+            set (G.984.3 11.1.3). Only the stock firmware reports them;
+            odi-oss reports los, lof and lom only, so this rule stays silent
+            there. On odi-oss v1.3.0 or later the counters behind the error
+            rate are exported: see gpon_ds_fec_codewords_total and
+            gpon_ds_bip_error_bits_total.
 
       # O5 and no service: the case every other metric looks healthy in
       # (a wrong serial, PLOAM password or LOID accepted by the OLT).
@@ -163,8 +166,10 @@ groups:
           description: >-
             The ONU reports O5 but its BWmap allocations have not moved for
             5 minutes: the OLT no longer grants it upstream bandwidth, so
-            nothing leaves the stick. A served ONU gets about 2,000
-            allocations a second. Needs an odi-oss kernel with the GPON
+            nothing leaves the stick. How many allocations a served ONU
+            gets a second is the OLT's choice (about 500 on one OLT, about
+            2,000 on two others), so compare with this stick's usual rate,
+            not with a fixed number. Needs an odi-oss kernel with the GPON
             line counters (gpon_ds_bwmap_allocations_total).
 
       # Data lost on the fibre: FEC could not repair the codeword. Corrected
@@ -223,7 +228,13 @@ groups:
 
   - name: odi-optics
     rules:
-      # G.984.2 class B+ ONU receiver: sensitivity -27 dBm, overload -8 dBm.
+      # The first four rules here are fixed class B+ defaults, not the limits
+      # of the module in the stick: the module stores its own (SFF-8472 A2h
+      # 0-39) and raises its own flags against them. A line the stick works
+      # on below -27 dBm keeps the absolute rules firing; the gpon_transceiver
+      # rules at the end of this group follow the module. G.984.2 class B+
+      # ONU receiver: sensitivity -27 dBm (-28 dBm is also quoted), overload
+      # -8 dBm.
       - alert: OdiRxPowerLow
         expr: gpon_rx_power_dbm < -25
         for: 10m
@@ -329,6 +340,52 @@ groups:
           summary: "{{ $labels.instance }}: supply {{ $value | printf \"%.3f\" }} V"
           description: >-
             The 3.3 V supply from the host port is outside +-5%.
+
+      # The module's own alarm flags (SFF-8472 A2h 112-113), against the
+      # limits stored in the module. Needs an odi-oss diag with `pon get
+      # transceiver alarm-status` and an exporter that asks for it; absent
+      # otherwise, so the rules stay silent on older images.
+      - alert: OdiTransceiverAlarm
+        expr: gpon_transceiver_alarm{kind="alarm"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: module alarm {{ $labels.condition }}"
+          description: >-
+            The transceiver module reports the {{ $labels.condition }} alarm,
+            against the limits stored in the module, for 10 minutes. For
+            rx_power_low look at gpon_rx_power_dbm and the fibre; for
+            temperature, bias_current or voltage see the matching readings.
+
+      # The inner limit of the same flags: earlier and quieter.
+      - alert: OdiTransceiverWarning
+        expr: gpon_transceiver_alarm{kind="warning"} == 1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $labels.instance }}: module warning {{ $labels.condition }}"
+          description: >-
+            The transceiver module reports the {{ $labels.condition }}
+            warning, the inner limit stored in the module, for 30 minutes.
+
+      # All five optical readings vanish when the I2C read fails, and every
+      # optics alert above is a threshold on them: this is the one that says
+      # the module cannot be read, while the ONU is up.
+      - alert: OdiTransceiverUnreadable
+        expr: |
+          gpon_transceiver_up == 0
+          and on (job, instance) gpon_diag_up == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: the transceiver cannot be read"
+          description: >-
+            The optical readings of {{ $labels.instance }} are missing: the
+            read of the module on its I2C port failed for 5 minutes. The
+            optics alerts cannot fire while this lasts.
 
   - name: odi-system
     rules:

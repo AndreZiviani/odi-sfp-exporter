@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- The module's own alarm flags: `gpon_transceiver_alarm{kind,condition}` (the
+  ten SFF-8472 alarm and ten warning flags, against the limits stored in the
+  module), `gpon_transceiver_rx_los` and `gpon_transceiver_up` (0 when the I2C
+  read of the module failed, which is also why the five optical readings are
+  then absent), from `diag pon get transceiver alarm-status`. Nothing is
+  emitted when the diag does not know the command. Alerts
+  `OdiTransceiverAlarm`, `OdiTransceiverWarning` and `OdiTransceiverUnreadable`,
+  with promtool tests. `src/transceiver.h`, tested natively
+  (`test/test_transceiver.c`). `gpon_diag_sections_expected` is now 9.
+
+- Text that claimed more than is known, corrected. "A served ONU gets about
+  2,000 BWmap allocations a second" (alert, dashboard, docs) is the rate of two
+  OLTs; a third grants about 500, so it is now described as the OLT's choice
+  and the alert (0 while O5, for 5 minutes) is unchanged. The downstream GEM
+  idle and non-idle counts are 32-bit and count the whole downstream (the
+  dashboard said 16-bit). `sf` and `sd` are raised by the ONU (they were
+  called OLT-side), and only the stock firmware reports them. The optics
+  alerts are said to be class B+ defaults, not the limits of the module. The
+  bit error rate panel gains a BIP-8 line and says it reads 0 with downstream
+  FEC off. Two ISP-specific stick names left the docs.
+
 - Dashboard: the pre-FEC bit error rate estimate is shown with one decimal
   (was ten decimals).
 

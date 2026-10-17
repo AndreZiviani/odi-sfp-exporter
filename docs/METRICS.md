@@ -16,13 +16,32 @@ From `/bin/diag`, **all in a single fork per scrape**:
 | `gpon_temperature_celsius` | `diag pon get transceiver temperature` |
 | `gpon_voltage_volts` | `diag pon get transceiver voltage` |
 | `gpon_onu_state` | `diag gpon get onu-state` — the N in O(N); 5 is operational |
-| `gpon_alarm{alarm="..."}` | `diag gpon get alarm-status` — `los`, `lof`, `lom`, `sf`, `sd`, `tx_too_long`, `tx_mismatch`; 1 means asserted |
+| `gpon_alarm{alarm="..."}` | `diag gpon get alarm-status` — `los`, `lof`, `lom` on odi-oss; the stock firmware also prints `sf`, `sd`, `tx_too_long`, `tx_mismatch`; 1 means asserted |
+| `gpon_transceiver_alarm{kind="alarm\|warning",condition="..."}` | `diag pon get transceiver alarm-status` — the module's own flags, see below |
+| `gpon_transceiver_rx_los` | same — the module's optical LOS bit (A2h byte 110 bit 1) |
+| `gpon_transceiver_up` | same — 1 when the module answered on I2C, 0 when the read failed |
 | `gpon_port_{receive,transmit}_octets_total{port="..."}` | `diag mib dump counter port all` — **the throughput metric**, see below |
 | `gpon_port_{receive,transmit}_packets_total{port,kind="unicast\|multicast\|broadcast"}` | same |
 | `gpon_port_{receive,transmit}_drops_total{port}` | same |
 | `gpon_port_receive_errors_total{port,kind="crc_align\|fragment\|jabber\|undersize"}` | same |
 | `gpon_port_pause_frames_total{port,direction="receive\|transmit"}` | same |
 | `gpon_port_frames_total{port,direction="rx\|tx",size="64\|65_127\|128_255\|256_511\|512_1023\|1024_1518\|1519_max"}` | same — frame-size histogram |
+
+**The module's own flags.** `gpon_transceiver_alarm` is one series per
+SFF-8472 flag (A2h bytes 112-113 for `kind="alarm"`, 116-117 for
+`kind="warning"`): `condition` is `temperature_high`, `temperature_low`,
+`voltage_high`, `voltage_low`, `bias_current_high`, `bias_current_low`,
+`tx_power_high`, `tx_power_low`, `rx_power_high` or `rx_power_low`; 1 means
+the module itself says so. The limits are the module's own (A2h bytes 0-39),
+not the class B+ defaults of the optics alerts: one module read -28.9 dBm as
+its Rx-low warning and -30 dBm as its alarm. A line the stick still works
+on below the class B+ default is therefore far from the module's own alarm,
+and one the module flags can still carry traffic. `gpon_transceiver_up 0`
+means the I2C read of the module failed: the five readings above are
+absent in that case, which is the only place that says why. Nothing is
+emitted when the diag does not know the command (the stock firmware, an
+older odi-oss), so absent means "cannot say", not "fine". `src/transceiver.h`,
+tested natively (`test/test_transceiver.c`).
 
 **`port="2"` is the PON side and `port="0"` the host SerDes side.** These are
 the only counters that show whether the stick is actually *forwarding*, so they
@@ -58,7 +77,7 @@ is running that driver: rc35 prefers an `/etc/config/metricsd` override over
 the image's own `/bin/metricsd`, and nothing ties that override to a matching
 kernel, so an exporter can end up paired with an older driver that reports
 these as plain 32-bit registers, wrapping at 4.29 GB — which is what a live
-read on stick `vero` showed. So the exporter no longer trusts the field width:
+read on one stick showed. So the exporter no longer trusts the field width:
 it tracks the last raw reading per port and extends it into a monotonic
 64-bit total itself (`src/wrap.h`; see docs/DESIGN.md). On a stick with the
 fixed driver this is a no-op, since the reading then never goes backwards.
@@ -277,7 +296,15 @@ What to know before alerting on them:
 - **Alarms are read every 100 ms** (and at every interrupt) while the ONU
   is activated, every second otherwise; a loss shorter than that can be
   missed. ONU state times are to the second; transitions are all counted.
-- **Every count that shares a register is 16-bit** (the upstream bursts,
+- **The downstream GEM idle and non-idle counts are 32-bit** and count the
+  whole downstream, not only this ONU's frames: on one line `ds_gem_idle`
+  ran at about 63 million a second, which is 2.48832 Gbit/s of 5-byte idle
+  frames (an inference from that line and the arithmetic, not a read of the
+  stock firmware). `idle x 5 x 8 / 2.48832e9` is then the idle share of the
+  downstream capacity.
+- **BWmap allocations a second are the OLT's choice**: about 2,000 a second
+  on two OLTs and about 500 on a third. Alert on 0 while O5, not on a number.
+- **Every other count that shares a register is 16-bit** (the upstream bursts,
   PLOAM, DBRu and GEM frames, and the downstream pairs; 8-bit for the PLend
   `uncorrectable` and the Blen counts) and stops at all ones within a
   sample. Above 65535 upstream GEM frames a second `gpon_us_gem_frames_total`

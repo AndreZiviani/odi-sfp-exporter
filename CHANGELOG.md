@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The Grafana dashboard title no longer names a stick make ("ODI XPON SoC and
+  GPON signal metrics"). No OLT or ONT make is named in this repository.
+  Refs odi-oss#114
+
 - The module's own limits and calibration: `gpon_transceiver_limit{measure,
   level,side}` (its alarm and warning limits, in the unit of the reading, to
   draw next to the readings) and `gpon_transceiver_monitoring_info` (A0h byte

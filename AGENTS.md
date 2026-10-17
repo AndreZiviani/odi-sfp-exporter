@@ -30,10 +30,12 @@ other repo, not here.
     src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
     src/gpon_link.h       the GPON link counters, alarm and state times from /proc/odi_gpon/; pure
     src/gpon_flow.h       the per-GEM-port families from /proc/odi_gpon/flows; pure, host-tested
+    src/transceiver.h     the module alarm flags and gpon_transceiver_up from diag pon get transceiver alarm-status; pure, host-tested
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
     src/start.S           _start and a 6-argument syscall stub for setsockopt
+    test/test_transceiver.c host-native test for src/transceiver.h (`make test`)
     test/test_wrap.c      host-native unit test for src/wrap.h (`make test`)
     test/test_confighash.c  host-native unit test for src/confighash.h (`make test`)
     test/test_slot_state.c host-native unit test for src/slot_state.h (`make test`)
@@ -74,7 +76,7 @@ other repo, not here.
 
 `make test` is host-native (plain `cc`, no Docker, no qemu-user) — it covers
 `src/wrap.h`, `src/resetinfo.h`, `src/confighash.h`, `src/slot_state.h`, `src/host_link.h`,
-`src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h` and the `mib_*` tables in
+`src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h`, `src/transceiver.h` and the `mib_*` tables in
 `src/metrics_body.h`, which have
 no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,

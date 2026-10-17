@@ -50,8 +50,10 @@ including a healthy stick on which nothing may fire.
 | `OdiOmciServicesDropped` | warning | fewer services than the 6-hour maximum, but not zero, for 15 min |
 | `OdiPortReceiveErrors` | warning | more than 10 malformed frames (CRC, fragment, jabber, undersize) in 15 min on one port, for 15 min; port 3 (CPU) undersize excluded: it is the OMCI replies (METRICS.md, "Known caveats") |
 
-`sf` and `sd` are the OLT-side downstream bit-error-rate thresholds, signal
-fail and signal degrade. The line counters from odi-oss (METRICS.md, "The GPON
+`sf` and `sd` are signal fail and signal degrade, raised by the ONU when the
+downstream bit error rate crosses the thresholds the OLT set (G.984.3
+11.1.3). Only the stock firmware reports them; odi-oss reports `los`, `lof`
+and `lom`, so `OdiGponAlarm` cannot fire there. The line counters from odi-oss (METRICS.md, "The GPON
 link") add what the ONU sees itself: `OdiOnuNoUpstreamGrants` is the stuck
 ONU, and `OdiFecUncorrectable` is data lost on the fibre. Corrected FEC
 codewords and BIP errors are on the dashboard rather than alerted on, since a
@@ -62,9 +64,14 @@ ports.
 
 ### Optics
 
-Absolute thresholds are the ITU-T G.984.2 class B+ ONU limits, which is what
-a GPON stick like this one is sold as; change them if your OLT link budget is
-a different class.
+The absolute thresholds below are the ITU-T G.984.2 class B+ ONU limits
+(sensitivity is quoted as -27 dBm here and -28 dBm elsewhere; not checked
+against the standard), which is what a GPON stick like this one is sold as,
+not the limits of the module in your stick: the module stores its own (A2h
+bytes 0-39) and raises its own flags against them, which the last three
+alerts below follow. A line a stick works on below -27 dBm keeps the absolute
+alerts firing; silence those and keep `OdiTransceiverAlarm`. Change the
+numbers if your link budget is a different class.
 
 | alert | severity | fires when |
 |---|---|---|
@@ -76,6 +83,9 @@ a different class.
 | `OdiModuleTemperatureHigh` | warning | above 70 C (the commercial SFP range) for 10 min |
 | `OdiModuleTemperatureCritical` | critical | above 80 C for 5 min |
 | `OdiSupplyVoltageOutOfRange` | warning | outside 3.3 V +-5% for 10 min |
+| `OdiTransceiverAlarm` | warning | the module itself raises an alarm flag (`gpon_transceiver_alarm{kind="alarm"}`), for 10 min |
+| `OdiTransceiverWarning` | info | the module raises a warning flag, its inner limit, for 30 min |
+| `OdiTransceiverUnreadable` | warning | `gpon_transceiver_up` is 0 for 5 min while diag answers: the optical readings are missing and the optics alerts cannot fire |
 
 **The ageing laser.** The transmitter runs under automatic power control, so
 as the laser ages the driver needs more bias current for the same light:

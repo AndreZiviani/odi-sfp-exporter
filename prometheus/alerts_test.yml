@@ -130,7 +130,7 @@ tests:
           - exp_labels: {severity: warning, job: odi, instance: s1, alarm: sd}
             exp_annotations:
               summary: "s1: GPON alarm sd"
-              description: "sd has been asserted for 5 minutes. sf and sd are the OLT-side signal fail and signal degrade thresholds on the downstream bit error rate. On odi-oss v1.3.0 or later the counters behind it are exported too: see gpon_ds_fec_codewords_total and gpon_ds_bip_error_blocks_total."
+              description: "sd has been asserted for 5 minutes. sf and sd are signal fail and signal degrade: the ONU raises them when the downstream bit error rate crosses the thresholds the OLT set (G.984.3 11.1.3). Only the stock firmware reports them; odi-oss reports los, lof and lom only, so this rule stays silent there. On odi-oss v1.3.0 or later the counters behind the error rate are exported: see gpon_ds_fec_codewords_total and gpon_ds_bip_error_bits_total."
       - eval_time: 30m
         alertname: OdiOnuNotOperational
         exp_alerts:
@@ -446,9 +446,11 @@ tests:
               description: >-
                 The ONU reports O5 but its BWmap allocations have not moved
                 for 5 minutes: the OLT no longer grants it upstream
-                bandwidth, so nothing leaves the stick. A served ONU gets
-                about 2,000 allocations a second. Needs an odi-oss kernel
-                with the GPON line counters
+                bandwidth, so nothing leaves the stick. How many
+                allocations a served ONU gets a second is the OLT's choice
+                (about 500 on one OLT, about 2,000 on two others), so
+                compare with this stick's usual rate, not with a fixed
+                number. Needs an odi-oss kernel with the GPON line counters
                 (gpon_ds_bwmap_allocations_total).
       - eval_time: 45m
         alertname: OdiFecUncorrectable
@@ -510,3 +512,62 @@ tests:
               summary: "s1: host port fell back to auto-negotiation"
               description: "HOST_AUTONEG is off on s1, but this boot found no host link with auto-negotiation off, so the host port runs it on. Check that the router port runs 1000 Mb/s full duplex with auto-negotiation off and try off again from the web UI, or set the host port back to on. It clears at the next boot that brings the link up with auto-negotiation off."
       - {eval_time: 45m, alertname: OdiHostLinkFallback, exp_alerts: []}
+
+  # The module's own flags, and an unreadable module. The module in the first
+  # series set sits below its own Rx-power low alarm (and so its warning) for
+  # the whole hour; the second cannot be read for the hour; the third is fine.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_transceiver_alarm{job="odi",instance="s1",kind="alarm",condition="rx_power_low"}'
+        values: '0x10 1x50'
+      - series: 'gpon_transceiver_alarm{job="odi",instance="s1",kind="warning",condition="rx_power_low"}'
+        values: '0x10 1x50'
+      - series: 'gpon_transceiver_alarm{job="odi",instance="s1",kind="alarm",condition="temperature_high"}'
+        values: '0x60'
+      - series: 'gpon_transceiver_up{job="odi",instance="s1"}'
+        values: '1x60'
+      - series: 'gpon_diag_up{job="odi",instance="s1"}'
+        values: '1x60'
+      - series: 'gpon_transceiver_up{job="odi",instance="s2"}'
+        values: '1x20 0x40'
+      - series: 'gpon_diag_up{job="odi",instance="s2"}'
+        values: '1x60'
+      - series: 'gpon_transceiver_up{job="odi",instance="s3"}'
+        values: '0x60'
+      - series: 'gpon_diag_up{job="odi",instance="s3"}'
+        values: '0x60'
+    alert_rule_test:
+      - {eval_time: 15m, alertname: OdiTransceiverAlarm, exp_alerts: []}
+      - eval_time: 30m
+        alertname: OdiTransceiverAlarm
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1, kind: alarm, condition: rx_power_low}
+            exp_annotations:
+              summary: "s1: module alarm rx_power_low"
+              description: >-
+                The transceiver module reports the rx_power_low alarm,
+                against the limits stored in the module, for 10 minutes. For
+                rx_power_low look at gpon_rx_power_dbm and the fibre; for
+                temperature, bias_current or voltage see the matching
+                readings.
+      - {eval_time: 30m, alertname: OdiTransceiverWarning, exp_alerts: []}
+      - eval_time: 55m
+        alertname: OdiTransceiverWarning
+        exp_alerts:
+          - exp_labels: {severity: info, job: odi, instance: s1, kind: warning, condition: rx_power_low}
+            exp_annotations:
+              summary: "s1: module warning rx_power_low"
+              description: >-
+                The transceiver module reports the rx_power_low warning, the
+                inner limit stored in the module, for 30 minutes.
+      - eval_time: 30m
+        alertname: OdiTransceiverUnreadable
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s2}
+            exp_annotations:
+              summary: "s2: the transceiver cannot be read"
+              description: >-
+                The optical readings of s2 are missing: the read of the
+                module on its I2C port failed for 5 minutes. The optics
+                alerts cannot fire while this lasts.
+      # s3 has no diag at all: that is OdiDiagDown, not an unreadable module.

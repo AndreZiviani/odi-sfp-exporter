@@ -306,7 +306,7 @@
         "spec": {
           "id": 101,
           "title": "Active Alarms",
-          "description": "Count of GPON alarm flags raised in the last 5 minutes (lof, sf, lom, los, sd, tx_mismatch, tx_too_long)",
+          "description": "Count of GPON alarm flags raised in the last 5 minutes. odi-oss reports los, lof and lom; the stock firmware also reports sf, sd, tx_mismatch and tx_too_long.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1188,7 +1188,7 @@
         "spec": {
           "id": 11,
           "title": "PON Optical Power (Rx/Tx)",
-          "description": "Class B+ RX: -8 (overload) to -28 dBm (sensitivity). TX: +0.5..+5 dBm. Hidden until ONU reaches O5 (registered) to exclude pre-registration bogus readings.",
+          "description": "Class B+ RX: -8 (overload) to -28 dBm (sensitivity). TX: +0.5..+5 dBm. These are class B+ defaults, not the limits stored in the module: the module raises its own flags (gpon_transceiver_alarm). Hidden until ONU reaches O5 (registered) to exclude pre-registration bogus readings.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1960,7 +1960,7 @@
         "spec": {
           "id": 205,
           "title": "Exporter Health",
-          "description": "diag sections parsed/expected (8/8 = full scrape) and gpon_exporter_up",
+          "description": "diag sections parsed/expected (equal = full scrape) and gpon_exporter_up",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3597,7 +3597,7 @@
         "spec": {
           "id": 603,
           "title": "Upstream grants/s",
-          "description": "BWmap allocations accepted for this ONU, per second, over the rate interval. About 2,070/s is a healthy served ONU. 0 while the ONU says O5 means the OLT stopped granting it upstream time (a stuck ONU).",
+          "description": "BWmap allocations accepted for this ONU, per second, over the rate interval. How many a second is the OLT's choice (about 500/s on one OLT, about 2,000/s on two others), so compare with this stick's usual rate. 0 while the ONU says O5 means the OLT stopped granting it upstream time (a stuck ONU).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4063,8 +4063,8 @@
         "kind": "Panel",
         "spec": {
           "id": 612,
-          "title": "Pre-FEC bit error rate (estimate)",
-          "description": "Estimate: FEC-corrected bits per second divided by the downstream line rate, 2.48832e9 bit/s. It counts only errors FEC repaired, so it understates the true BER once uncorrectable codewords appear. Not a calibrated measurement.",
+          "title": "Bit error rate (estimate)",
+          "description": "Estimate: FEC-corrected bits per second divided by the downstream line rate, 2.48832e9 bit/s. It counts only errors FEC repaired, so it understates the true BER once uncorrectable codewords appear, and it reads 0 when downstream FEC is off (see FEC in use): then the BIP-8 line is the signal. The BIP-8 line is bit errors the BIP-8 check found per bit of downstream (the basis of SF and SD, G.984.3 11.1.3), after FEC when FEC is on. Not a calibrated measurement.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4090,6 +4090,29 @@
                       }
                     },
                     "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "rate(gpon_ds_bip_error_bits_total{instance=~\"$instance\"}[$__rate_interval]) / 2.48832e9",
+                        "instant": false,
+                        "legendFormat": "{{instance}} BIP-8 BER",
+                        "range": true
+                      },
+                      "labels": {
+                        "grafana.app/export-label": "prometheus-1",
+                        "grafana.app/export-datasource-name": "Mimir"
+                      }
+                    },
+                    "refId": "B",
                     "hidden": false
                   }
                 }
@@ -4350,7 +4373,7 @@
         "spec": {
           "id": 621,
           "title": "Upstream grants: BWmap allocations/s",
-          "description": "BWmap allocations accepted for this ONU per second: the OLT granting it upstream time. Healthy served ONU: about 2,070/s. 0 while the ONU state says O5 is a stuck ONU: ranged and registered but the OLT stopped granting, so nothing goes upstream (check gpon_us_bursts_total too). Abnormally high (about 9x normal was seen after a power cut) means the OLT sent a garbage or oversized bandwidth map: look at gpon_ds_bwmap_errors_total and re-register the ONU. Allocation errors by kind are shown on the second query.",
+          "description": "BWmap allocations accepted for this ONU per second: the OLT granting it upstream time. How many a second is the OLT's choice (about 500/s on one OLT, about 2,000/s on two others): compare with this stick's usual rate. 0 while the ONU state says O5 is a stuck ONU: ranged and registered but the OLT stopped granting, so nothing goes upstream (check gpon_us_bursts_total too). Far above this stick's usual rate (about 9x was seen after a power cut on one line) means the OLT sent a garbage or oversized bandwidth map: look at gpon_ds_bwmap_errors_total and re-register the ONU. Allocation errors by kind are shown on the second query.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -5086,7 +5109,7 @@
         "spec": {
           "id": 641,
           "title": "Downstream GEM frames/s",
-          "description": "GEM frames per second by kind. idle frames fill unused downstream capacity; non_idle carry data. 16-bit hardware counters: a count that stops growing at 65535/s is saturation (see Saturated samples).",
+          "description": "GEM frames per second by kind. idle frames fill unused downstream capacity; non_idle carry data. Both are 32-bit hardware counters over the whole downstream, not only this ONU's frames: a fully idle 2.48832 Gbit/s downstream is about 62 million idle frames a second (a 5-byte idle frame each, measured on one line, not read from the stock firmware), so idle x 5 x 8 / 2.48832e9 is the idle share of the downstream capacity. A count that stops growing at 4294967295/s would be saturation (see Saturated samples).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -6200,7 +6223,7 @@
         "spec": {
           "id": 664,
           "title": "Upstream grants/s",
-          "description": "BWmap allocations accepted for this ONU per second: the OLT granting it upstream time. Healthy served ONU: about 2,070/s. 0 while the ONU state says O5 is a stuck ONU: ranged and registered but the OLT stopped granting, so nothing goes upstream (check gpon_us_bursts_total too). Abnormally high (about 9x normal was seen after a power cut) means the OLT sent a garbage or oversized bandwidth map: look at gpon_ds_bwmap_errors_total (on the GPON link detail tab) and re-register the ONU.",
+          "description": "BWmap allocations accepted for this ONU per second: the OLT granting it upstream time. How many a second is the OLT's choice (about 500/s on one OLT, about 2,000/s on two others): compare with this stick's usual rate. 0 while the ONU state says O5 is a stuck ONU: ranged and registered but the OLT stopped granting, so nothing goes upstream (check gpon_us_bursts_total too). Far above this stick's usual rate (about 9x was seen after a power cut on one line) means the OLT sent a garbage or oversized bandwidth map: look at gpon_ds_bwmap_errors_total (on the GPON link detail tab) and re-register the ONU.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

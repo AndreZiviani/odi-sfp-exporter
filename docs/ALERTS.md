@@ -85,6 +85,7 @@ numbers if your link budget is a different class.
 | `OdiSupplyVoltageOutOfRange` | warning | outside 3.3 V +-5% for 10 min |
 | `OdiTransceiverAlarm` | warning | the module itself raises an alarm flag (`gpon_transceiver_alarm{kind="alarm"}`), for 10 min |
 | `OdiTransceiverWarning` | info | the module raises a warning flag, its inner limit, for 30 min |
+| `OdiTransceiverCalibration` | warning | the module reports external calibration or no diagnostics, for 10 min: the optical readings assume internal calibration |
 | `OdiTransceiverUnreadable` | warning | `gpon_transceiver_up` is 0 for 5 min while diag answers: the optical readings are missing and the optics alerts cannot fire |
 
 **The ageing laser.** The transmitter runs under automatic power control, so

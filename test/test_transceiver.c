@@ -137,6 +137,59 @@ int main(void)
 	render("Optical Power, status: occur\n");
 	ck(outn == 0, "only Optical LOS is the LOS series");
 
+	/* The module limits, as odi-oss diag prints them (test/transceiver.golden
+	 * there): one real module. */
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_limits(&o,
+		"Temperature alarm high: 100.000000 C\n"
+		"Temperature alarm low: -40.000000 C\n"
+		"Voltage warning low: 3.100000 V\n"
+		"Bias Current alarm high: 100.000000 mA\n"
+		"Tx Power warning low: 0.000000  dBm\n"
+		"Rx Power alarm low: -30.000000  dBm\n"
+		"Rx Power warning low: -28.860566  dBm\n"
+		"Rx Power alarm high: -inf  dBm\n");
+	ck(has("gpon_transceiver_limit{measure=\"temperature\",level=\"alarm\",side=\"high\"} 100.000000\n") &&
+	   has("gpon_transceiver_limit{measure=\"temperature\",level=\"alarm\",side=\"low\"} -40.000000\n"),
+	   "limits: value only, the unit of the reading is the metric");
+	ck(has("{measure=\"rx_power\",level=\"alarm\",side=\"low\"} -30.000000\n") &&
+	   has("{measure=\"rx_power\",level=\"warning\",side=\"low\"} -28.860566\n") &&
+	   has("{measure=\"bias_current\",level=\"alarm\",side=\"high\"} 100.000000\n") &&
+	   has("{measure=\"voltage\",level=\"warning\",side=\"low\"} 3.100000\n") &&
+	   has("{measure=\"tx_power\",level=\"warning\",side=\"low\"} 0.000000\n"),
+	   "limits: every measurement and level");
+	ck(!has("-inf") && count("gpon_transceiver_limit{") == 7, "limits: a -inf limit is skipped");
+	ck(count("# TYPE gpon_transceiver_limit gauge\n") == 1, "limits: announced once");
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_limits(&o, "% transceiver limits read failed\n");
+	ck(outn == 0, "limits: a failure line emits nothing");
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_limits(&o, "Temperature alarm high: 1e3 C\nTemperature alarm low: 100 C\n");
+	ck(outn == 0, "limits: not a plain decimal is dropped");
+
+	/* The monitoring type. */
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_monitor(&o, "Monitoring type: 0x68\nDigital diagnostics: implemented\n"
+			      "Calibration: internal\nRx power type: average\n");
+	ck(has("gpon_transceiver_monitoring_info{diagnostics=\"implemented\",calibration=\"internal\","
+	       "rx_power_type=\"average\"} 1\n"), "monitoring type: internal, average");
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_monitor(&o, "Digital diagnostics: not implemented\nCalibration: internal and external\r\n"
+			      "Rx power type: OMA\r\n");
+	ck(has("diagnostics=\"not_implemented\",calibration=\"internal_and_external\",rx_power_type=\"oma\"} 1"),
+	   "monitoring type: words from the fixed vocabulary, CRLF, spaces to underscores");
+	outn = 0;
+	out[0] = 0;
+	xcvr_emit_monitor(&o, "Digital diagnostics: implemented\nCalibration: bogus\"x\nRx power type: average\n");
+	ck(outn == 0, "monitoring type: a word outside the vocabulary drops the series");
+	xcvr_emit_monitor(&o, "% transceiver monitoring type read failed\n");
+	ck(outn == 0, "monitoring type: a failure line emits nothing");
+
 	if (failures) {
 		fprintf(stderr, "test_transceiver: %d failure(s)\n", failures);
 		return 1;

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The module's own limits and calibration: `gpon_transceiver_limit{measure,
+  level,side}` (its alarm and warning limits, in the unit of the reading, to
+  draw next to the readings) and `gpon_transceiver_monitoring_info` (A0h byte
+  92: diagnostics, internal or external calibration, average or OMA power),
+  from the odi-oss diag commands `pon get transceiver limits` and
+  `monitoring-type`; nothing when the diag does not have them. Alert
+  `OdiTransceiverCalibration`: the conversions of the readings assume internal
+  calibration. `gpon_diag_sections_expected` is now 11.
+
 - The module's own alarm flags: `gpon_transceiver_alarm{kind,condition}` (the
   ten SFF-8472 alarm and ten warning flags, against the limits stored in the
   module), `gpon_transceiver_rx_los` and `gpon_transceiver_up` (0 when the I2C

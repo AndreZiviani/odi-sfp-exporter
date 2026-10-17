@@ -825,6 +825,24 @@ static void metric_transceiver(int fd, const char *sec)
 	xcvr_emit(&o, sec);
 }
 
+static void metric_transceiver_limits(int fd, const char *sec)
+{
+	struct prov_out o;
+
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	xcvr_emit_limits(&o, sec);
+}
+
+static void metric_transceiver_monitor(int fd, const char *sec)
+{
+	struct prov_out o;
+
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	xcvr_emit_monitor(&o, sec);
+}
+
 /*
  * One diag invocation per scrape.
  *
@@ -870,6 +888,8 @@ static const struct diag_sec diag_secs[] = {
 	{ "pon get transceiver voltage", "gpon_voltage_volts",
 	  "Supply voltage of the GPON transceiver, in Volts.", scan_decimal, 0 },
 	{ "pon get transceiver alarm-status", 0, 0, 0, metric_transceiver },
+	{ "pon get transceiver limits", 0, 0, 0, metric_transceiver_limits },
+	{ "pon get transceiver monitoring-type", 0, 0, 0, metric_transceiver_monitor },
 	{ "gpon get onu-state", "gpon_onu_state",
 	  "ONU state number, the N in O(N). 5 is operational.", scan_onu_state, 0 },
 	{ "gpon get alarm-status", 0, 0, 0, metric_alarms },

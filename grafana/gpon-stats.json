@@ -1388,7 +1388,7 @@
         "kind": "Panel",
         "spec": {
           "id": 13,
-          "title": "HSGQ / ODI XPON SoC and GPON signal metrics",
+          "title": "ODI XPON SoC and GPON signal metrics",
           "description": "",
           "links": [],
           "data": {

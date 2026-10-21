@@ -13,7 +13,8 @@
   `src/soc_temp.h`, tested natively (`test/test_soc_temp.c`). Needs the odi-oss
   kernel change that adds the sensor; odi-oss pins this exporter only after it
   is released.
-
+  On a stick running that kernel the scrape reads gpon_soc_temperature_celsius
+  61.
 ## v1.6.0 (2026-10-17)
 
 - The Grafana dashboard title no longer names a stick make ("ODI XPON SoC and

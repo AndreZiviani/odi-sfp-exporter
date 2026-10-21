@@ -19,6 +19,7 @@
 #include "resetinfo.h"
 #include "confighash.h"
 #include "slot_state.h"
+#include "soc_temp.h"
 #include "host_link.h"
 #include "provision.h"
 #include "gpon_link.h"
@@ -1438,6 +1439,37 @@ static void metric_host_link(int fd)
 		write_all(fd, out, n);
 }
 
+/*
+ * The SoC die temperature, from the hwmon sensor odi-oss registers (src/
+ * soc_temp.h has the name and the rendering). The hwmonN number is not fixed,
+ * so up to SOC_TEMP_HWMON_COUNT name files are read until one matches: sysfs
+ * files of a few bytes, no fork, no wait. No such device (the stock firmware,
+ * an older image), nothing emitted.
+ */
+static void metric_soc_temp(int fd)
+{
+	/* The digit after "hwmon" is at index 22 of both paths. Static, so the
+	 * initialiser is data and not a memcpy, which this build does not link. */
+	static char name_path[] = "/sys/class/hwmon/hwmon0/name";
+	static char temp_path[] = "/sys/class/hwmon/hwmon0/temp1_input";
+	char buf[24], out[512];
+	unsigned long n;
+	int i;
+
+	for (i = 0; i < SOC_TEMP_HWMON_COUNT; i++) {
+		name_path[22] = (char)('0' + i);
+		if (read_file(name_path, buf, sizeof(buf)) <= 0 || !soc_temp_name_match(buf))
+			continue;
+		temp_path[22] = name_path[22];
+		if (read_file(temp_path, buf, sizeof(buf)) <= 0)
+			return;
+		n = soc_temp_render(buf, out, sizeof(out));
+		if (n)
+			write_all(fd, out, n);
+		return;
+	}
+}
+
 static void emit_metrics(int fd)
 {
 	put_fd(fd, "# HELP gpon_exporter_up Always 1. Confirms the exporter ran.\n"
@@ -1451,6 +1483,7 @@ static void emit_metrics(int fd)
 	metric_uptime(fd);
 	metric_reset_info(fd);
 	metric_loadavg(fd);
+	metric_soc_temp(fd);
 	metric_meminfo(fd);
 	metric_netdev(fd);
 	metric_config(fd);

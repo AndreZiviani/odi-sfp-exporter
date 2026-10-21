@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The SoC die temperature: `gpon_soc_temperature_celsius`, read from the
+  hwmon device `rtl9602c_soc` that the odi-oss kernel registers (the hwmonN
+  index is looked up by name, `hwmon0` to `hwmon7`, one read each; no fork).
+  Nothing is emitted when there is no such device (the stock firmware, an
+  odi-oss image without the sensor) or its value is not a plain integer. The
+  value is the kernel's reading and is not calibrated (scale and offset are
+  inferred): good to a few degrees, a trend more than a measurement, and not
+  the optics module's temperature, which stays `gpon_temperature_celsius`.
+  `src/soc_temp.h`, tested natively (`test/test_soc_temp.c`). Needs the odi-oss
+  kernel change that adds the sensor; odi-oss pins this exporter only after it
+  is released.
+
 ## v1.6.0 (2026-10-17)
 
 - The Grafana dashboard title no longer names a stick make ("ODI XPON SoC and

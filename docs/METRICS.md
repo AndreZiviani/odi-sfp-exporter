@@ -141,8 +141,21 @@ From `/proc`, which costs no fork at all:
 | `gpon_boot_count` | `/proc/odi_ramlog_prev` — boots of this image since the last power cycle, this one included |
 | `gpon_last_reset_reason{reason="...",client="..."}` | `/proc/odi_ramlog_prev` — always 1; why the previous boot ended, see below |
 | `gpon_load{1,5,15}` | `/proc/loadavg` |
+| `gpon_soc_temperature_celsius` | `/sys/class/hwmon/hwmonN/temp1_input`, the hwmon device named `rtl9602c_soc` (odi-oss kernels that have it; nothing on the stock firmware or an older image) — the SoC die temperature, see below |
 | `gpon_memory_bytes{kind="total\|free\|buffers\|cached"}` | `/proc/meminfo` |
 | `gpon_network_{receive,transmit}_{bytes,packets,errs,drop}_total{device="..."}` | `/proc/net/dev` |
+
+**The SoC die temperature is not calibrated.** `gpon_soc_temperature_celsius`
+is the odi-oss kernel's reading of the SoC thermal sensor, passed on as
+printed (millidegrees, shown in degrees with three decimals). The sensor's
+scale and offset are inferred, not calibrated: on one stick it read 62 C
+while the optics module read 46 C, and the stock firmware reads 63 to 65 C in
+the same state. Read it as a die temperature good to a few degrees, a trend
+(warm-up, a cage that runs hot) more than a measurement, and do not alert on a
+tight absolute threshold. It is a different quantity from
+`gpon_temperature_celsius`, which is the optics module's own. The exporter
+looks for the device by name among `hwmon0` to `hwmon7`, one read each, and
+emits nothing when none is called `rtl9602c_soc`.
 
 From the config partition, `/var/config` (jffs2, shared by both firmware
 slots, never written by a reflash), one `stat` per file per scrape and a fork

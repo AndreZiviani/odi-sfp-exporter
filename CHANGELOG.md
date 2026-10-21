@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.7.0 (2026-10-21)
+
 - The SoC die temperature: `gpon_soc_temperature_celsius`, read from the
   hwmon device `rtl9602c_soc` that the odi-oss kernel registers (the hwmonN
   index is looked up by name, `hwmon0` to `hwmon7`, one read each; no fork).

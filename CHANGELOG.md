@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- The SoC die temperature limits and alarms, when the odi-oss kernel exports
+  them next to `temp1_input`: `gpon_soc_temperature_max_celsius` and
+  `gpon_soc_temperature_crit_celsius` (from `temp1_max` and `temp1_crit`) and
+  `gpon_soc_temperature_alarm{level="max"|"crit"}` (0 or 1, from
+  `temp1_max_alarm` and `temp1_crit_alarm`). Each appears only when its file
+  exists and parses; an older image without them emits none of them and
+  `gpon_soc_temperature_celsius` is unchanged. One bounded read per file, no
+  fork. The limits are odi-oss defaults on an unverified scale, as the HELP
+  text says. `src/soc_temp.h`, tested natively. Needs the odi-oss hwmon alarm
+  change for the new metrics to appear.
+
 ## v1.7.0 (2026-10-21)
 
 - The SoC die temperature: `gpon_soc_temperature_celsius`, read from the

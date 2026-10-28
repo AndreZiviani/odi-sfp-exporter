@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.8.0 (2026-10-28)
+
 - The SoC die temperature limits and alarms, when the odi-oss kernel exports
   them next to `temp1_input`: `gpon_soc_temperature_max_celsius` and
   `gpon_soc_temperature_crit_celsius` (from `temp1_max` and `temp1_crit`) and

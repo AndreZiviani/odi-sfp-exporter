@@ -59,5 +59,47 @@ int main(void)
 	n = soc_temp_render("62000\n", out, 20);
 	ck(n == 19 && out[19] == 0 && strlen(out) == 19, "truncated at cap, terminated");
 
+	/* Limits: temp1_max / temp1_crit. */
+	n = soc_temp_render_limit("95000\n", 0, out, sizeof out);
+	ck(n && n == strlen(out) && strstr(out, "\ngpon_soc_temperature_max_celsius 95.000\n") != NULL, "max 95 C");
+	ck(strstr(out, "# TYPE gpon_soc_temperature_max_celsius gauge\n") != NULL &&
+	   strstr(out, "unverified scale") != NULL, "max HELP and TYPE, unverified scale");
+	n = soc_temp_render_limit("110000", 1, out, sizeof out);
+	ck(n && strstr(out, "\ngpon_soc_temperature_crit_celsius 110.000\n") != NULL, "crit 110 C, no newline");
+	ck(strstr(out, "# TYPE gpon_soc_temperature_crit_celsius gauge\n") != NULL &&
+	   strstr(out, "unverified scale") != NULL, "crit HELP and TYPE, unverified scale");
+	ck(soc_temp_render_limit(NULL, 0, out, sizeof out) == 0 && out[0] == 0, "max absent: nothing");
+	ck(soc_temp_render_limit(NULL, 1, out, sizeof out) == 0, "crit absent: nothing");
+	ck(soc_temp_render_limit("", 0, out, sizeof out) == 0, "max empty: nothing");
+	ck(soc_temp_render_limit("hot\n", 0, out, sizeof out) == 0, "max garbage: nothing");
+	ck(soc_temp_render_limit("95.5\n", 1, out, sizeof out) == 0, "crit decimal: nothing");
+	ck(soc_temp_render_limit("95000 \n", 1, out, sizeof out) == 0, "crit trailing junk: nothing");
+	ck(soc_temp_render_limit("95000\n", 0, out, 0) == 0, "limit zero capacity");
+
+	/* Alarms: temp1_max_alarm / temp1_crit_alarm. */
+	n = soc_temp_render_alarms("0\n", "0\n", out, sizeof out);
+	ck(n && n == strlen(out) &&
+	   strstr(out, "\ngpon_soc_temperature_alarm{level=\"max\"} 0\n") != NULL &&
+	   strstr(out, "\ngpon_soc_temperature_alarm{level=\"crit\"} 0\n") != NULL, "both alarms 0");
+	ck(strstr(out, "# TYPE gpon_soc_temperature_alarm gauge\n") != NULL &&
+	   strstr(out, "unverified scale") != NULL, "alarm HELP and TYPE, unverified scale");
+	soc_temp_render_alarms("1", "0", out, sizeof out);
+	ck(strstr(out, "{level=\"max\"} 1\n") != NULL && strstr(out, "{level=\"crit\"} 0\n") != NULL, "max set, no newline");
+	soc_temp_render_alarms("1\n", "1\n", out, sizeof out);
+	ck(strstr(out, "{level=\"max\"} 1\n") != NULL && strstr(out, "{level=\"crit\"} 1\n") != NULL, "both set");
+	n = soc_temp_render_alarms("1\n", NULL, out, sizeof out);
+	ck(n && strstr(out, "{level=\"max\"} 1\n") != NULL && strstr(out, "level=\"crit\"") == NULL, "crit file absent: only max");
+	n = soc_temp_render_alarms(NULL, "0\n", out, sizeof out);
+	ck(n && strstr(out, "level=\"max\"") == NULL && strstr(out, "{level=\"crit\"} 0\n") != NULL, "max file absent: only crit");
+	n = soc_temp_render_alarms("2\n", "1\n", out, sizeof out);
+	ck(n && strstr(out, "level=\"max\"") == NULL && strstr(out, "{level=\"crit\"} 1\n") != NULL, "garbage value skipped, other kept");
+	ck(soc_temp_render_alarms(NULL, NULL, out, sizeof out) == 0 && out[0] == 0, "both absent: nothing");
+	ck(soc_temp_render_alarms("x\n", "\n", out, sizeof out) == 0, "both garbage: nothing");
+	ck(soc_temp_render_alarms("01\n", "1 \n", out, sizeof out) == 0, "multi-char or trailing junk: nothing");
+	ck(soc_temp_render_alarms("0\n\n", "", out, sizeof out) == 0, "two lines, empty: nothing");
+	ck(soc_temp_render_alarms("0\n", "0\n", out, 0) == 0, "alarm zero capacity");
+	n = soc_temp_render_alarms("0\n", "1\n", out, 40);
+	ck(n == 39 && strlen(out) == 39, "alarm truncated at cap, terminated");
+
 	return fails ? 1 : 0;
 }

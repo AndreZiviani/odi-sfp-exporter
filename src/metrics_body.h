@@ -1440,6 +1440,41 @@ static void metric_host_link(int fd)
 }
 
 /*
+ * The limits and alarms next to temp1_input, same hwmon directory (digit d):
+ * temp1_max, temp1_crit, temp1_max_alarm, temp1_crit_alarm. One bounded read
+ * each, no fork; a missing file (an older image) emits nothing for it.
+ */
+static void metric_soc_temp_limits(int fd, char d)
+{
+	static char path[] = "/sys/class/hwmon/hwmon0/temp1_crit_alarm";
+	static const char *const names[4] = {
+		"temp1_max", "temp1_crit", "temp1_max_alarm", "temp1_crit_alarm"
+	};
+	char bufs[4][24], out[768];
+	const char *p[4];
+	unsigned long n;
+	int i, j;
+
+	for (i = 0; i < 4; i++) {
+		for (j = 0; j < 24; j++)
+			path[j] = "/sys/class/hwmon/hwmon0/"[j];
+		path[22] = d;
+		for (j = 0; j < 16 && names[i][j]; j++)
+			path[24 + j] = names[i][j];
+		path[24 + j] = 0;
+		p[i] = read_file(path, bufs[i], sizeof(bufs[i])) > 0 ? bufs[i] : 0;
+	}
+	for (i = 0; i < 2; i++) {
+		n = soc_temp_render_limit(p[i], i, out, sizeof(out));
+		if (n)
+			write_all(fd, out, n);
+	}
+	n = soc_temp_render_alarms(p[2], p[3], out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
+}
+
+/*
  * The SoC die temperature, from the hwmon sensor odi-oss registers (src/
  * soc_temp.h has the name and the rendering). The hwmonN number is not fixed,
  * so up to SOC_TEMP_HWMON_COUNT name files are read until one matches: sysfs
@@ -1466,6 +1501,7 @@ static void metric_soc_temp(int fd)
 		n = soc_temp_render(buf, out, sizeof(out));
 		if (n)
 			write_all(fd, out, n);
+		metric_soc_temp_limits(fd, name_path[22]);
 		return;
 	}
 }

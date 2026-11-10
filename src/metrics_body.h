@@ -21,6 +21,7 @@
 #include "slot_state.h"
 #include "soc_temp.h"
 #include "host_link.h"
+#include "respawn_state.h"
 #include "provision.h"
 #include "gpon_link.h"
 #include "transceiver.h"
@@ -1440,6 +1441,56 @@ static void metric_host_link(int fd)
 }
 
 /*
+ * The restart state of the respawned daemons, from the files odi-oss keeps in
+ * /var/run/respawn (src/respawn_state.h has the format and the rendering). One
+ * getdents64 call on the directory (a few hundred bytes, a truncated listing
+ * loses names, never blocks) and one bounded read of each tmpfs file, no fork.
+ * No directory, nothing emitted.
+ */
+static void metric_respawn(int fd)
+{
+	char dents[2048] __attribute__((aligned(8)));
+	char path[sizeof(RESPAWN_DIR_PATH) + RESPAWN_NAME_MAX + 1];
+	char st[512], up[64], out[8192];
+	struct respawn_svc sv[RESPAWN_SVC_MAX], one;
+	unsigned long nsv = 0, off = 0, n;
+	long got, uptime = -1;
+
+	got = read_dir(RESPAWN_DIR_PATH, dents, sizeof(dents));
+	if (got <= 0)
+		return;
+	if (read_file("/proc/uptime", up, sizeof(up)) > 0)
+		uptime = respawn_uptime(up);
+	while (off + DIRENT64_NAME_OFF < (unsigned long)got) {
+		const char *name = dents + off + DIRENT64_NAME_OFF;
+		unsigned short reclen = 0;
+		unsigned long k, p = 0;
+
+		/* d_reclen is a host-endian u16 at an offset the compiler cannot
+		 * assume aligned: copy its two bytes into place. */
+		for (k = 0; k < sizeof(reclen); k++)
+			((char *)&reclen)[k] = dents[off + DIRENT64_RECLEN_OFF + k];
+		if (reclen <= DIRENT64_NAME_OFF || off + reclen > (unsigned long)got)
+			break;
+		off += reclen;
+		if (!respawn_name_ok(name))
+			continue;
+		for (k = 0; RESPAWN_DIR_PATH[k]; k++)
+			path[p++] = RESPAWN_DIR_PATH[k];
+		path[p++] = '/';
+		for (k = 0; name[k]; k++)
+			path[p++] = name[k];
+		path[p] = 0;
+		if (read_file(path, st, sizeof(st)) <= 0 || !respawn_parse(name, st, &one))
+			continue;
+		respawn_add(sv, &nsv, &one);
+	}
+	n = respawn_render(sv, nsv, uptime, out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
+}
+
+/*
  * The limits and alarms next to temp1_input, same hwmon directory (digit d):
  * temp1_max, temp1_crit, temp1_max_alarm, temp1_crit_alarm. One bounded read
  * each, no fork; a missing file (an older image) emits nothing for it.
@@ -1516,6 +1567,7 @@ static void emit_metrics(int fd)
 	metric_image_info(fd);
 	metric_slot_state(fd);
 	metric_host_link(fd);
+	metric_respawn(fd);
 	metric_uptime(fd);
 	metric_reset_info(fd);
 	metric_loadavg(fd);

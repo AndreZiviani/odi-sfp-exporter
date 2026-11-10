@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- The restart state of the daemons odi-oss respawns, from
+  `/var/run/respawn/<name>` (written by its `respawn.sh`), one series per
+  daemon with `service="<name>"`: `gpon_service_restarts_total` (counter,
+  restarts since boot), `gpon_service_backoff` and `gpon_service_degraded`
+  (1 while the daemon is inside its restart backoff or in the crash-loop
+  state, counted until its latest start has lived `stable_s` seconds, then 0
+  by themselves) and `gpon_service_backoff_seconds` (the wait before the
+  latest start). One directory listing and one bounded read per file, no
+  fork; names outside `[0-9A-Za-z_]` and malformed values are skipped, and
+  the stock firmware and older odi-oss images emit nothing. `src/respawn_state.h`,
+  tested natively, with a `getdents64` helper in `src/syscall.h`.
+  Refs AndreZiviani/odi-oss#271.
+
 ## v1.9.0 (2026-11-10)
 
 - The PON-ID message some OLTs send (G.984.3 Annex C), from the `pon_id`

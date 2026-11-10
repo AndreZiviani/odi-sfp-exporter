@@ -1,0 +1,8 @@
+state=backoff
+starts=5
+fast=4
+last_run_s=2
+delay_s=8
+cap_s=60
+stable_s=30
+last_start_s=200

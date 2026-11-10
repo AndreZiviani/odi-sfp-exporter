@@ -1,0 +1,8 @@
+state=ok
+starts=3
+fast=0
+last_run_s=500
+delay_s=0
+cap_s=30
+stable_s=30
+last_start_s=700

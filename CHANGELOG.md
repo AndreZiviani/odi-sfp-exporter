@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.9.0 (2026-11-10)
+
 - The PON-ID message some OLTs send (G.984.3 Annex C), from the `pon_id`
   line of `/proc/odi_gpon/status` (odi-oss with PON-ID decoding):
   `gpon_olt_launch_power_dbm`, the launch power the OLT reports (absent

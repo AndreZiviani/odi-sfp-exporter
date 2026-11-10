@@ -99,6 +99,12 @@ gpon_counter_saturated_samples_total{counter="ds_gem_idle"} 1
 # HELP gpon_counter_samples_total Reads of the GPON line counters the driver made since boot, one a second.
 # TYPE gpon_counter_samples_total counter
 gpon_counter_samples_total 11
+# HELP gpon_counter_sample_ds_superframe The downstream superframe count at the sample the gpon_ds_* totals are from: the frame count to pair with them, where gpon_ds_superframe is read up to a second apart.
+# TYPE gpon_counter_sample_ds_superframe gauge
+gpon_counter_sample_ds_superframe 305491896
+# HELP gpon_counter_sample_fec_active 1 when downstream FEC was in use at the sample the gpon_ds_* totals are from.
+# TYPE gpon_counter_sample_fec_active gauge
+gpon_counter_sample_fec_active{direction="ds"} 1
 # HELP gpon_alarm_events_total GPON alarms raised, as the driver read the live bit: every 100 ms and at every interrupt while the ONU is activated, every second otherwise.
 # TYPE gpon_alarm_events_total counter
 gpon_alarm_events_total{alarm="los"} 1
@@ -140,6 +146,12 @@ gpon_pon_id_odn_class 2
 # HELP gpon_pon_id_reach_extender 1 when the launch power in the PON-ID message is a reach extender's, 0 when it is the OLT's.
 # TYPE gpon_pon_id_reach_extender gauge
 gpon_pon_id_reach_extender 0
+# HELP gpon_pon_id_received_uptime_seconds The uptime at which the last PON-ID message arrived; gpon_uptime_seconds less this is its age. The driver keeps it in 32 bits of milliseconds, so it wraps after 49.7 days of uptime.
+# TYPE gpon_pon_id_received_uptime_seconds gauge
+gpon_pon_id_received_uptime_seconds 823.224
+# HELP gpon_ranging_eqd_bits The equalization delay of the last Ranging_Time message, in upstream bit times. The OLT sets it at each ranging, so a step can mean a change in the fibre path or at the OLT. Absent until a Ranging_Time message came.
+# TYPE gpon_ranging_eqd_bits gauge
+gpon_ranging_eqd_bits 81234
 # HELP gpon_ploam_messages_total PLOAM messages the driver handled: received from the OLT, sent to it.
 # TYPE gpon_ploam_messages_total counter
 gpon_ploam_messages_total{direction="ds"} 120

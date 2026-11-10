@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `gpon_ranging_eqd_bits`, the equalization delay of the last Ranging_Time
+  message, from the `ranging_time` line of `/proc/odi_gpon/status`. The OLT
+  sets it at each ranging, so its history shows a change in the fibre path or
+  at the OLT port. Absent on `ranging_time none`. Refs #32.
+- `gpon_pon_id_received_uptime_seconds`, when the last PON-ID message came,
+  from the `ms` field of the `pon_id` line (milliseconds since boot, as the
+  driver prints them). `gpon_uptime_seconds` less this is its age. The PON
+  identifier on that line is still not exported. Refs #32.
+- `gpon_counter_sample_ds_superframe` and
+  `gpon_counter_sample_fec_active{direction="ds"}`, from the
+  `ctr_ds_superframe` and `ctr_fec_now` lines of `/proc/odi_gpon/counters`
+  (odi-oss#320): the superframe count and the downstream FEC bit of the
+  sample the counter totals are from, so that a share of the downstream
+  frames is computed from one sample. `gpon_ds_superframe` and
+  `gpon_fec_active` from `status` are unchanged. Refs #32.
+- The counters fixture follows the odi-oss v1.16.0-beta.4 golden, which also
+  has `ctr ds_fec_total_cw`; no metric reads it yet, and the test shows it is
+  skipped like any counter the table does not know.
 - The restart state of the daemons odi-oss respawns, from
   `/var/run/respawn/<name>` (written by its `respawn.sh`), one series per
   daemon with `service="<name>"`: `gpon_service_restarts_total` (counter,

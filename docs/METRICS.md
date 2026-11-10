@@ -406,6 +406,42 @@ reason. `OdiSafeModeBoot`, `OdiSafeModeUnacknowledged` and
 `OdiHostLinkFallback` (docs/ALERTS.md) fire on them. The rendering is
 `src/host_link.h`, tested natively (`test/test_host_link.c`).
 
+The restart state of the respawned daemons, from the files odi-oss keeps in
+`/var/run/respawn/<name>` (one per daemon: confd, dropbear, klogd, metricsd,
+ntpd, omcid, syslogd; written by `respawn.sh` at every start, format in odi-oss
+`docs/SETTINGS.md`, "Restart budget"). One directory listing and one small
+tmpfs read per file per scrape, no fork. Every series carries
+`service="<name>"`:
+
+| metric | source key | meaning |
+|---|---|---|
+| `gpon_service_restarts_total` (counter) | `starts` | restarts of the daemon since boot: `starts` counts the first start of the boot, so this is `starts - 1`; it begins again from 0 at a reboot |
+| `gpon_service_backoff` | `state`, `last_start_s`, `stable_s` | 1 while the daemon is inside its backoff: the latest start followed a short run (`state` is `backoff` or `degraded`) and has not yet lived `stable_s` seconds |
+| `gpon_service_degraded` | the same | 1 while the daemon is in the `degraded` state (five or more short runs in a row) and its latest start has not yet lived `stable_s` seconds: the crash loop |
+| `gpon_service_backoff_seconds` | `delay_s` | the wait `respawn.sh` put before the latest start, while the daemon is inside its backoff; 0 once it has run `stable_s` seconds |
+
+`respawn.sh` writes the state at a start only, so a file that says `backoff`
+or `degraded` keeps saying it for as long as the daemon then runs. The three
+backoff series apply the rule its header gives readers: the daemon is healthy
+again once `uptime - last_start_s >= stable_s`, using `/proc/uptime`, so they
+fall back to 0 by themselves while `gpon_service_restarts_total` keeps the
+count. They are omitted for a daemon whose file lacks a valid `state`,
+`last_start_s` or `stable_s`, or when the uptime cannot be read;
+`gpon_service_restarts_total` needs only a valid `starts`. A malformed line
+is skipped. A file name with a character outside `[0-9A-Za-z_]` (the
+dot-prefixed temporary file of the rename included) is skipped whole, and at
+most 32 daemons are reported. No directory (the stock firmware, an older
+image) emits none of the four. Nothing here says a daemon is down: a daemon
+that died and is still inside its wait shows as the previous start, so the
+series describe the restart budget, not liveness.
+
+    increase(gpon_service_restarts_total[1h]) > 3     # restarting repeatedly
+    gpon_service_degraded == 1                        # in a crash loop now
+
+The parse and rendering are `src/respawn_state.h`, tested natively against
+fixtures in the format `respawn.sh` writes (`test/test_respawn_state.c`,
+`test/fixtures/respawn/`).
+
 Plus three health gauges:
 
 | metric | meaning |

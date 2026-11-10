@@ -1,0 +1,8 @@
+state=degraded
+starts=7
+fast=6
+last_run_s=1
+delay_s=30
+cap_s=30
+stable_s=30
+last_start_s=990

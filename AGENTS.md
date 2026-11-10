@@ -28,6 +28,7 @@ other repo, not here.
     src/slot_state.h      the boot-slot metrics from odi-oss /var/run/odi-slot; pure, host-tested
     src/soc_temp.h        the SoC die temperature from the hwmon device rtl9602c_soc; pure, host-tested
     src/host_link.h       the host-port auto-negotiation and safe-mode metrics from odi-oss state files; pure
+    src/respawn_state.h   gpon_service_* from odi-oss /var/run/respawn/<name>; pure, host-tested
     src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
     src/gpon_link.h       the GPON link counters, alarm and state times from /proc/odi_gpon/; pure
     src/gpon_flow.h       the per-GEM-port families from /proc/odi_gpon/flows; pure, host-tested
@@ -42,6 +43,7 @@ other repo, not here.
     test/test_slot_state.c host-native unit test for src/slot_state.h (`make test`)
     test/test_soc_temp.c  host-native unit test for src/soc_temp.h (`make test`)
     test/test_host_link.c host-native unit test for src/host_link.h (`make test`)
+    test/test_respawn_state.c host-native test for src/respawn_state.h against test/fixtures/respawn, with a golden (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
     test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens
     test/test_gpon_link.c host-native test for src/gpon_link.h against test/fixtures, with a golden; also the scrape with no /proc files
@@ -78,7 +80,7 @@ other repo, not here.
 
 `make test` is host-native (plain `cc`, no Docker, no qemu-user) — it covers
 `src/wrap.h`, `src/resetinfo.h`, `src/confighash.h`, `src/slot_state.h`, `src/soc_temp.h`, `src/host_link.h`,
-`src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h`, `src/transceiver.h` and the `mib_*` tables in
+`src/respawn_state.h`, `src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h`, `src/transceiver.h` and the `mib_*` tables in
 `src/metrics_body.h`, which have
 no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,

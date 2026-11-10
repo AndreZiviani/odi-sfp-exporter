@@ -221,6 +221,29 @@ __attribute__((unused)) static long read_file(const char *path, char *buf, unsig
 	return (long)got;
 }
 
+/*
+ * One getdents64 call on a directory: the raw linux_dirent64 records in buf
+ * (u64 d_ino, s64 d_off, u16 d_reclen, u8 d_type, then the NUL-terminated
+ * d_name at offset 19; the layout is the same on every architecture), or a
+ * negative errno. 4000 + 219 is __NR_getdents64 in the o32 table, in the
+ * kernel since 2.6.0. A single call bounds the read: a directory that does
+ * not fit buf is truncated at a record boundary, never blocked on.
+ */
+#define __NR_getdents64 4219
+#define DIRENT64_NAME_OFF 19
+#define DIRENT64_RECLEN_OFF 16
+__attribute__((unused)) static long read_dir(const char *path, char *buf, unsigned long cap)
+{
+	long fd = syscall3(__NR_open, (long)path, O_RDONLY, 0);
+	long n;
+
+	if (fd < 0)
+		return fd;
+	n = syscall3(__NR_getdents64, fd, (long)buf, cap);
+	syscall3(__NR_close, fd, 0, 0);
+	return n;
+}
+
 /* 0 on success, negative errno otherwise (a missing file is -ENOENT). */
 __attribute__((unused)) static long stat_path(const char *path, struct stat64 *st)
 {

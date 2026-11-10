@@ -1,0 +1,29 @@
+# HELP gpon_service_restarts_total Restarts of the daemon since boot (its starts minus the first), from /var/run/respawn/<service>.
+# TYPE gpon_service_restarts_total counter
+gpon_service_restarts_total{service="confd"} 2
+gpon_service_restarts_total{service="dropbear"} 2
+gpon_service_restarts_total{service="klogd"} 4
+gpon_service_restarts_total{service="ntpd"} 1
+gpon_service_restarts_total{service="omcid"} 0
+gpon_service_restarts_total{service="syslogd"} 6
+# HELP gpon_service_backoff 1 while the daemon is inside its restart backoff: its latest start followed a short run and has not yet lived stable_s seconds. Absent when that cannot be told.
+# TYPE gpon_service_backoff gauge
+gpon_service_backoff{service="confd"} 0
+gpon_service_backoff{service="dropbear"} 1
+gpon_service_backoff{service="klogd"} 0
+gpon_service_backoff{service="omcid"} 0
+gpon_service_backoff{service="syslogd"} 1
+# HELP gpon_service_degraded 1 while the daemon is in the degraded state of its restart budget (five or more short runs in a row) and its latest start has not yet lived stable_s seconds. Absent when that cannot be told.
+# TYPE gpon_service_degraded gauge
+gpon_service_degraded{service="confd"} 0
+gpon_service_degraded{service="dropbear"} 0
+gpon_service_degraded{service="klogd"} 0
+gpon_service_degraded{service="omcid"} 0
+gpon_service_degraded{service="syslogd"} 1
+# HELP gpon_service_backoff_seconds The wait before the latest start of the daemon, in seconds, while it is inside its backoff; 0 once it has run stable_s seconds. Absent when that cannot be told.
+# TYPE gpon_service_backoff_seconds gauge
+gpon_service_backoff_seconds{service="confd"} 0
+gpon_service_backoff_seconds{service="dropbear"} 2
+gpon_service_backoff_seconds{service="klogd"} 0
+gpon_service_backoff_seconds{service="omcid"} 0
+gpon_service_backoff_seconds{service="syslogd"} 30

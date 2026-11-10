@@ -354,6 +354,22 @@ int main(void)
 	    "gpon_ploam_messages_total{direction=\"ds\"} 120\n");
 	has("the PLOAM pair, us", "ploam ds_rx 120 us_tx 40\n",
 	    "gpon_ploam_messages_total{direction=\"us\"} 40\n");
+	has("a PON-ID launch power above 0 dBm", "pon_id odn_class 2 reach_extender 0 tol 334 id 0011223344556a ms 5\n",
+	    "gpon_olt_launch_power_dbm 3.4\n");
+	has("a PON-ID launch power below 0 dBm", "pon_id odn_class 2 reach_extender 0 tol 295 id 0011223344556a ms 5\n",
+	    "gpon_olt_launch_power_dbm -0.5\n");
+	has("a PON-ID launch power of 0", "pon_id odn_class 2 reach_extender 0 tol 0 id 0011223344556a ms 5\n",
+	    "gpon_olt_launch_power_dbm -30.0\n");
+	has("the PON-ID class", "pon_id odn_class 4 reach_extender 1 tol 65535 id 0011223344556a ms 5\n",
+	    "gpon_pon_id_odn_class 4\n");
+	has("the PON-ID reach extender bit", "pon_id odn_class 4 reach_extender 1 tol 65535 id 0011223344556a ms 5\n",
+	    "gpon_pon_id_reach_extender 1\n");
+	render("pon_id odn_class 2 reach_extender 0 tol 65535 id 0011223344556a ms 5\n");
+	if (strstr(out, "gpon_olt_launch_power_dbm")) {
+		fprintf(stderr, "FAIL: a TOL of 65535 (not reported) rendered a launch power:\n%s", out);
+		failures++;
+	}
+	nothing("no PON-ID", "pon_id none\n");
 
 	if (failures) {
 		fprintf(stderr, "test_gpon_link: %d failure(s)\n", failures);

@@ -131,6 +131,15 @@ gpon_fec_active{direction="us"} 1
 # HELP gpon_ds_superframe The downstream superframe count (30 bits, one per 125 us frame); standing still means no downstream frames.
 # TYPE gpon_ds_superframe gauge
 gpon_ds_superframe 305491896
+# HELP gpon_olt_launch_power_dbm The mean launch power the OLT reports in its PON-ID message (G.984.3 Annex C), a reach extender's when gpon_pon_id_reach_extender is 1. Absent when no PON-ID came since the last loss of signal or it does not report the power. Less gpon_rx_power_dbm, an estimate of the path loss.
+# TYPE gpon_olt_launch_power_dbm gauge
+gpon_olt_launch_power_dbm 3.4
+# HELP gpon_pon_id_odn_class The ODN class the OLT announces in its PON-ID message: 0 A, 1 B, 2 B+, 3 C, 4 C+.
+# TYPE gpon_pon_id_odn_class gauge
+gpon_pon_id_odn_class 2
+# HELP gpon_pon_id_reach_extender 1 when the launch power in the PON-ID message is a reach extender's, 0 when it is the OLT's.
+# TYPE gpon_pon_id_reach_extender gauge
+gpon_pon_id_reach_extender 0
 # HELP gpon_ploam_messages_total PLOAM messages the driver handled: received from the OLT, sent to it.
 # TYPE gpon_ploam_messages_total counter
 gpon_ploam_messages_total{direction="ds"} 120

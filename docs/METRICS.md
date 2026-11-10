@@ -268,6 +268,7 @@ shows here first, and so does an ONU that says O5 but is no longer served.
 | `gpon_alarm_events_total{alarm="los\|lof\|lom"}`, `gpon_alarm_seconds_total{alarm}` | `alarm_events`, `alarm_ms` |
 | `gpon_onu_state_seconds_total{state="O1".."O7"}`, `gpon_onu_state_transitions_total{from,to}` | `onu_state_ms`, `onu_transitions` |
 | `gpon_fec_active{direction="ds\|us"}`, `gpon_ds_superframe` | `fec_now`, `ds_superframe` (gauges) |
+| `gpon_olt_launch_power_dbm`, `gpon_pon_id_odn_class`, `gpon_pon_id_reach_extender` | `pon_id`: the last PON-ID message (G.984.3 Annex C) since the last loss of signal, from an OLT that sends one. The launch power is TOL, 0.1 dB steps above -30 dBm, and is absent when the OLT does not report it (65535); `gpon_olt_launch_power_dbm - gpon_rx_power_dbm` estimates the path loss. Class 0 A, 1 B, 2 B+, 3 C, 4 C+ (gauges; odi-oss with PON-ID decoding) |
 | `gpon_ploam_messages_total{direction}`, `gpon_ploam_messages_by_type_total{direction,type}`, `gpon_rei_sent_total`, `gpon_ploam_timer_expiries_total{timer="to1\|to2"}`, `gpon_irq_total`, `gpon_irq_spurious_total`, `gpon_onu_id` | `ploam`, `ploam_type`, `rei_count`, `to1_expiries`, `to2_expiries`, `irq_count`, `irq_spurious`, `onu_id` |
 
 The live LOS, LOF and LOM bits are `gpon_alarm` from `diag` above, not

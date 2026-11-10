@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The PON-ID message some OLTs send (G.984.3 Annex C), from the `pon_id`
+  line of `/proc/odi_gpon/status` (odi-oss with PON-ID decoding):
+  `gpon_olt_launch_power_dbm`, the launch power the OLT reports (absent
+  when it does not report one), `gpon_pon_id_odn_class` and
+  `gpon_pon_id_reach_extender`. Less `gpon_rx_power_dbm`, the launch power
+  estimates the path loss. All three are absent until a PON-ID arrives,
+  and on an OLT that sends none. Refs odi-oss#321.
+
 ## v1.8.0 (2026-10-28)
 
 - The SoC die temperature limits and alarms, when the odi-oss kernel exports

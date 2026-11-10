@@ -141,6 +141,7 @@ From `/proc`, which costs no fork at all:
 | `gpon_boot_count` | `/proc/odi_ramlog_prev` — boots of this image since the last power cycle, this one included |
 | `gpon_last_reset_reason{reason="...",client="..."}` | `/proc/odi_ramlog_prev` — always 1; why the previous boot ended, see below |
 | `gpon_load{1,5,15}` | `/proc/loadavg` |
+| `gpon_cpu_seconds_total{mode="user\|nice\|system\|idle\|iowait\|irq\|softirq\|steal"}` | the first line of `/proc/stat`: CPU time since boot by mode (counter). The kernel prints ticks of 1/100 s (`USER_HZ`, fixed at 100 on MIPS), rendered as seconds; a kernel that prints fewer columns gets fewer modes. `rate()` of a mode is the share of the time spent in it, so `1 - rate(gpon_cpu_seconds_total{mode="idle"}[5m])` is how busy the CPU is, which `gpon_load*` cannot say (below) |
 | `gpon_soc_temperature_celsius` | `/sys/class/hwmon/hwmonN/temp1_input`, the hwmon device named `rtl9602c_soc` (odi-oss kernels that have it; nothing on the stock firmware or an older image) — the SoC die temperature, see below |
 | `gpon_soc_temperature_max_celsius`, `gpon_soc_temperature_crit_celsius` | `temp1_max` and `temp1_crit` in the same hwmon directory (odi-oss defaults 95 and 110 C, on the same unverified scale); absent on an image without them |
 | `gpon_soc_temperature_alarm{level="max\|crit"}` | `temp1_max_alarm` and `temp1_crit_alarm` in the same directory, 0 or 1; each series only when its file exists and parses |
@@ -565,7 +566,8 @@ table in `src/metrics_body.h` so they cannot drift apart.
 - **`gpon_load*` is pinned and carries no signal.** Linux counts uninterruptible
   tasks in the load average, and this firmware keeps two kernel threads
   (`watchdog`, `led_swBlink`) permanently in D state. Load therefore sits at
-  exactly 2.00 forever. Do not alert on it.
+  exactly 2.00 forever. Do not alert on it; `gpon_cpu_seconds_total` is the
+  measure of CPU use.
 - **`/proc/net/dev` counters are 32-bit** and wrap at 4.29 GB, because
   `struct net_device_stats` uses `unsigned long` on this platform. Prometheus
   cannot distinguish a wrap from a counter reset, so `rate()` undercounts on a

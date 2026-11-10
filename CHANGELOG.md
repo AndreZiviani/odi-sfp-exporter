@@ -17,6 +17,10 @@
   sample the counter totals are from, so that a share of the downstream
   frames is computed from one sample. `gpon_ds_superframe` and
   `gpon_fec_active` from `status` are unchanged. Refs #32.
+- `gpon_cpu_seconds_total{mode}`, CPU time by mode from the first line of
+  `/proc/stat`: one small read, no fork. `gpon_load*` is pinned at 2.00 on
+  this firmware and says nothing about CPU use. `src/cpu_stat.h`, tested
+  natively. Refs #33.
 - The counters fixture follows the odi-oss v1.16.0-beta.4 golden, which also
   has `ctr ds_fec_total_cw`; no metric reads it yet, and the test shows it is
   skipped like any counter the table does not know.

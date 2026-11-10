@@ -32,6 +32,7 @@
  *     onu_transitions <from> <to> <n>
  *     fec_now <ds|us> <0|1>
  *     ds_superframe <n>
+ *     pon_id odn_class <n> reach_extender <0|1> tol <n> id <hex> ms <ms>, or pon_id none
  *     rei_count, to1_expiries, to2_expiries, irq_count, irq_spurious, onu_id
  *
  * ploam: `ploam ds_rx <n> us_tx <n>` and `ploam_type <ds|us> <0xNN> <n>`.
@@ -55,11 +56,17 @@
 #define LINK_ANY   ((const char *)1)	/* "key <label> <value>", label named by .labels */
 #define LINK_ANY2  ((const char *)2)	/* "key <label> <label> <value>", .labels "a,b" */
 
+/* link_row.unit: how the value is rendered. */
+#define LINK_UNIT_RAW	0	/* as it is */
+#define LINK_UNIT_MS	1	/* milliseconds: rendered as seconds */
+#define LINK_UNIT_TOL	2	/* a PON-ID TOL: 0.1 dB steps above -30 dBm, rendered as
+				 * dBm; 65535 (not reported) drops the sample */
+
 struct link_row {
 	const char *key;	/* the first word of the line */
 	const char *arg;	/* a word after the key, its value following it */
 	const char *labels;	/* label text, or the label name(s) for LINK_ANY* */
-	int ms;			/* the value is milliseconds: render seconds */
+	int unit;		/* LINK_UNIT_* */
 };
 
 struct link_fam {
@@ -189,6 +196,15 @@ static const struct link_fam link_fams[] = {
 	{ "gpon_ds_superframe", "gauge",
 	  "The downstream superframe count (30 bits, one per 125 us frame); standing still means no downstream frames.",
 	  { { "ds_superframe", LINK_VALUE, "", 0 } } },
+	{ "gpon_olt_launch_power_dbm", "gauge",
+	  "The mean launch power the OLT reports in its PON-ID message (G.984.3 Annex C), a reach extender's when gpon_pon_id_reach_extender is 1. Absent when no PON-ID came since the last loss of signal or it does not report the power. Less gpon_rx_power_dbm, an estimate of the path loss.",
+	  { { "pon_id", "tol", "", LINK_UNIT_TOL } } },
+	{ "gpon_pon_id_odn_class", "gauge",
+	  "The ODN class the OLT announces in its PON-ID message: 0 A, 1 B, 2 B+, 3 C, 4 C+.",
+	  { { "pon_id", "odn_class", "", 0 } } },
+	{ "gpon_pon_id_reach_extender", "gauge",
+	  "1 when the launch power in the PON-ID message is a reach extender's, 0 when it is the OLT's.",
+	  { { "pon_id", "reach_extender", "", 0 } } },
 	{ "gpon_ploam_messages_total", "counter",
 	  "PLOAM messages the driver handled: received from the OLT, sent to it.",
 	  { { "ploam", "ds_rx", "direction=\"ds\"", 0 },
@@ -217,9 +233,12 @@ static const struct link_fam link_fams[] = {
 #define LINK_NFAMS (sizeof(link_fams) / sizeof(link_fams[0]))
 
 /* The words of the line after its first, at most four. */
+/* Enough for the longest line read by word: pon_id has ten. */
+#define LINK_WORDS 10
+
 struct link_words {
-	const char *w[4];
-	unsigned long n[4];
+	const char *w[LINK_WORDS];
+	unsigned long n[LINK_WORDS];
 	int count;
 };
 
@@ -230,7 +249,7 @@ static void link_split(const char *l, unsigned long len, struct link_words *ws)
 	ws->count = 0;
 	while (i < len && l[i] != ' ')
 		i++;
-	while (i < len && ws->count < 4) {
+	while (i < len && ws->count < LINK_WORDS) {
 		while (i < len && l[i] == ' ')
 			i++;
 		if (i >= len)
@@ -278,6 +297,37 @@ static void link_put_ms(const struct prov_out *o, const char *v, unsigned long n
 	for (k = n; k < 3; k++)
 		prov_puts(o, "0");
 	prov_putn(o, v, n);
+}
+
+/* A TOL of at most five digits, as a number. */
+static unsigned long link_tol(const char *v, unsigned long n)
+{
+	unsigned long t = 0, k;
+
+	for (k = 0; k < n; k++)
+		t = t * 10 + (unsigned long)(v[k] - '0');
+	return t;
+}
+
+/* A TOL as dBm with one decimal: t tenths of a dB above -30 dBm. */
+static void link_put_tol(const struct prov_out *o, unsigned long t)
+{
+	long x = (long)t - 300;
+	char b[16];
+	int i = 0, k;
+	unsigned long a = (unsigned long)(x < 0 ? -x : x);
+
+	b[i++] = (char)('0' + a % 10);
+	b[i++] = '.';
+	a /= 10;
+	do {
+		b[i++] = (char)('0' + a % 10);
+		a /= 10;
+	} while (a);
+	if (x < 0)
+		b[i++] = '-';
+	for (k = i - 1; k >= 0; k--)
+		prov_putn(o, b + k, 1);
 }
 
 /* The label name number `idx` of "a,b" into o. */
@@ -349,6 +399,8 @@ static int link_row_sample(const struct prov_out *o, const char *name,
 	}
 	if (!link_digits(v, vn))
 		return 0;
+	if (r->unit == LINK_UNIT_TOL && (vn > 5 || link_tol(v, vn) >= 65535))
+		return 0;
 	if (dry)
 		return 1;
 
@@ -370,8 +422,10 @@ static int link_row_sample(const struct prov_out *o, const char *name,
 		prov_puts(o, "}");
 	}
 	prov_puts(o, " ");
-	if (r->ms)
+	if (r->unit == LINK_UNIT_MS)
 		link_put_ms(o, v, vn);
+	else if (r->unit == LINK_UNIT_TOL)
+		link_put_tol(o, link_tol(v, vn));
 	else
 		prov_putn(o, v, vn);
 	prov_puts(o, "\n");

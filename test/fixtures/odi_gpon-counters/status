@@ -13,6 +13,7 @@ irq_attached 1 isr_rc 0 imr_rc 0
 last_los_ms 0 state 0
 upstream_overhead guard 32 type1 0 type2 0 pattern 0x00 delimiter ab5983 preassigned_delay_en 0 sn_mask 0 extra_sn_tx 2 power_level_mode 0 preassigned_delay 0 bits 0
 ranging_time eqd_bits 81234 protection_path 0 min_resp_delay 0x00009132 multframe 0 inframe 118354
+pon_id odn_class 2 reach_extender 0 tol 334 id 0011223344556a ms 823224
 alarm_now los 0
 alarm_now lof 0
 alarm_now lom 0

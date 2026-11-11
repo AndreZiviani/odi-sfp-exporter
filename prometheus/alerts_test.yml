@@ -328,6 +328,37 @@ tests:
       # An hour after the boot the reset reason stops alerting.
       - {eval_time: 60m, alertname: OdiWatchdogReset, exp_alerts: []}
 
+  # One power cut from a high boot count: the count drops to 1, no reset loop.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_boot_count{job="odi",instance="s1"}'
+        values: '10x20 1x40'
+    alert_rule_test:
+      - {eval_time: 25m, alertname: OdiResetLoop, exp_alerts: []}
+      - {eval_time: 59m, alertname: OdiResetLoop, exp_alerts: []}
+
+  # A power cut followed by two reboots: two rises, still no reset loop.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_boot_count{job="odi",instance="s1"}'
+        values: '10x20 1x10 2x10 3x20'
+    alert_rule_test:
+      - {eval_time: 59m, alertname: OdiResetLoop, exp_alerts: []}
+
+  # A power cut followed by three reboots is a loop.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_boot_count{job="odi",instance="s1"}'
+        values: '10x20 1x10 2x10 3x10 4x20'
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: OdiResetLoop
+        exp_alerts:
+          - exp_labels: {severity: critical, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: 3 resets in an hour"
+              description: "The stick keeps resetting. Each boot is 75 to 80 s off the line. gpon_last_reset_reason says what fired."
+
   # A reboot someone asked for does not alert as a watchdog reset.
   - interval: 1m
     input_series:

@@ -166,6 +166,11 @@ static void test_port_index(void)
 {
 	CHECK(port_index("2", 1) == 2, "port_index(\"2\") = %d", port_index("2", 1));
 	CHECK(port_index("0", 1) == 0, "port_index(\"0\") = %d", port_index("0", 1));
+	CHECK(port_index("3", 1) == 3, "port_index(\"3\") = %d", port_index("3", 1));
+	CHECK(port_index("4", 1) == -1, "port_index(\"4\") should be refused, got %d",
+	      port_index("4", 1));
+	CHECK(port_index("5", 1) == -1, "port_index(\"5\") should be refused, got %d",
+	      port_index("5", 1));
 	CHECK(port_index("99", 2) == -1, "port_index(\"99\") should be refused, got %d",
 	      port_index("99", 2));
 	CHECK(port_index("", 0) == -1, "port_index(\"\") should be refused, got %d",

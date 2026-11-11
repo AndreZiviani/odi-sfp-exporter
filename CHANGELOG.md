@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `OdiResetLoop` counts only the rises of `gpon_boot_count` (`changes()` minus
+  `resets()`). A power cycle drops the count to 1, which made one power cut from
+  a count of 4 or more fire the alert; it is now not counted. `docs/ALERTS.md`
+  no longer says the boot after a power cycle is counted, and `alerts_test.yml`
+  covers a power cut, a power cut plus two reboots, and a power cut plus three.
+- A `Port:` index of 4 to 9 in the switch counter dump is no longer accepted as
+  an array index: `port_index()` refuses anything at or above `MIB_MAX_PORTS`,
+  so the octet counters fall back to the raw value instead of writing out of
+  bounds.
 - `gpon_ranging_eqd_bits`, the equalization delay of the last Ranging_Time
   message, from the `ranging_time` line of `/proc/odi_gpon/status`. The OLT
   sets it at each ranging, so its history shows a change in the fibre path or

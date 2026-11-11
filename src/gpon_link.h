@@ -24,6 +24,8 @@
  *     ctr <name> <total>               a hardware counter, since sampling began
  *     ctr_saturated <name> <samples>   samples that read the counter full
  *     ctr_samples <n>
+ *     ctr_ds_superframe <n>            the superframe count and the downstream
+ *     ctr_fec_now ds <0|1>             FEC bit of the sample the totals are from
  *
  * status:
  *     alarm_events <los|lof|lom> <n>   clear -> set, as read
@@ -33,6 +35,8 @@
  *     fec_now <ds|us> <0|1>
  *     ds_superframe <n>
  *     pon_id odn_class <n> reach_extender <0|1> tol <n> id <hex> ms <ms>, or pon_id none
+ *     ranging_time eqd_bits <n> protection_path <n> min_resp_delay <0xN>
+ *         multframe <n> inframe <n>, or ranging_time none
  *     rei_count, to1_expiries, to2_expiries, irq_count, irq_spurious, onu_id
  *
  * ploam: `ploam ds_rx <n> us_tx <n>` and `ploam_type <ds|us> <0xNN> <n>`.
@@ -178,6 +182,12 @@ static const struct link_fam link_fams[] = {
 	{ "gpon_counter_samples_total", "counter",
 	  "Reads of the GPON line counters the driver made since boot, one a second.",
 	  { { "ctr_samples", LINK_VALUE, "", 0 } } },
+	{ "gpon_counter_sample_ds_superframe", "gauge",
+	  "The downstream superframe count at the sample the gpon_ds_* totals are from: the frame count to pair with them, where gpon_ds_superframe is read up to a second apart.",
+	  { { "ctr_ds_superframe", LINK_VALUE, "", 0 } } },
+	{ "gpon_counter_sample_fec_active", "gauge",
+	  "1 when downstream FEC was in use at the sample the gpon_ds_* totals are from.",
+	  { { "ctr_fec_now", LINK_ANY, "direction", 0 } } },
 	{ "gpon_alarm_events_total", "counter",
 	  "GPON alarms raised, as the driver read the live bit: every 100 ms and at every interrupt while the ONU is activated, every second otherwise.",
 	  { { "alarm_events", LINK_ANY, "alarm", 0 } } },
@@ -205,6 +215,12 @@ static const struct link_fam link_fams[] = {
 	{ "gpon_pon_id_reach_extender", "gauge",
 	  "1 when the launch power in the PON-ID message is a reach extender's, 0 when it is the OLT's.",
 	  { { "pon_id", "reach_extender", "", 0 } } },
+	{ "gpon_pon_id_received_uptime_seconds", "gauge",
+	  "The uptime at which the last PON-ID message arrived; gpon_uptime_seconds less this is its age. The driver keeps it in 32 bits of milliseconds, so it wraps after 49.7 days of uptime.",
+	  { { "pon_id", "ms", "", LINK_UNIT_MS } } },
+	{ "gpon_ranging_eqd_bits", "gauge",
+	  "The equalization delay of the last Ranging_Time message, in upstream bit times. The OLT sets it at each ranging, so a step can mean a change in the fibre path or at the OLT. Absent until a Ranging_Time message came.",
+	  { { "ranging_time", "eqd_bits", "", 0 } } },
 	{ "gpon_ploam_messages_total", "counter",
 	  "PLOAM messages the driver handled: received from the OLT, sent to it.",
 	  { { "ploam", "ds_rx", "direction=\"ds\"", 0 },

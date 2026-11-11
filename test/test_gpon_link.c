@@ -370,6 +370,59 @@ int main(void)
 		failures++;
 	}
 	nothing("no PON-ID", "pon_id none\n");
+	has("when the PON-ID came, as uptime", "pon_id odn_class 2 reach_extender 0 tol 334 id 0011223344556a ms 1598628\n",
+	    "gpon_pon_id_received_uptime_seconds 1598.628\n");
+	has("when the PON-ID came, with no launch power reported", "pon_id odn_class 2 reach_extender 0 tol 65535 id 0011223344556a ms 5\n",
+	    "gpon_pon_id_received_uptime_seconds 0.005\n");
+	render("pon_id odn_class 2 reach_extender 0 tol 334 id 0011223344556a ms 1598628\n");
+	if (strstr(out, "0011223344556a")) {
+		fprintf(stderr, "FAIL: the PON identifier got out:\n%s", out);
+		failures++;
+	}
+	nothing("a PON-ID line cut before its time", "pon_id odn_class x reach_extender y tol z id 0011223344556a ms\n");
+
+	has("the EqD of the last ranging",
+	    "ranging_time eqd_bits 283549 protection_path 0 min_resp_delay 0x00009132 multframe 2 inframe 9629\n",
+	    "gpon_ranging_eqd_bits 283549\n");
+	nothing("no ranging yet", "ranging_time none\n");
+	nothing("an EqD that is not a number", "ranging_time eqd_bits 0x4539d protection_path 0\n");
+	/* The lines next to ranging_time carry the serial number: no row reads
+	 * them, and a made-up one must not show anywhere in the output. */
+	render("sn 4142434400c0ffee\n"
+	       "upstream_overhead guard 32 type1 0 type2 0 pattern 0x00 delimiter ab5983 preassigned_delay_en 0 sn_mask 0 extra_sn_tx 2 power_level_mode 0 preassigned_delay 0 bits 0\n"
+	       "ranging_time eqd_bits 283549 protection_path 0 min_resp_delay 0x00009132 multframe 2 inframe 9629\n");
+	if (strncmp(out, "# HELP gpon_ranging_eqd_bits ", 29) || !strstr(out, "\ngpon_ranging_eqd_bits 283549\n") ||
+	    strstr(strstr(out, "# TYPE ") + 7, "# TYPE ") || strstr(out, "c0ffee") || strstr(out, "41424344")) {
+		fprintf(stderr, "FAIL: the ranging lines rendered more than the EqD:\n%s", out);
+		failures++;
+	}
+
+	has("the superframe count of the counter sample", "ctr_samples 11\nctr_ds_superframe 305491896\n",
+	    "gpon_counter_sample_ds_superframe 305491896\n");
+	has("the FEC bit of the counter sample", "ctr_fec_now ds 1\n",
+	    "gpon_counter_sample_fec_active{direction=\"ds\"} 1\n");
+	/* The same facts in status keep their own families. */
+	render("ds_superframe 305491904\nfec_now ds 1\nfec_now us 0\nctr_ds_superframe 305491896\nctr_fec_now ds 0\n");
+	check_shape("status and counter sample together");
+	if (!strstr(out, "\ngpon_ds_superframe 305491904\n") ||
+	    !strstr(out, "\ngpon_counter_sample_ds_superframe 305491896\n") ||
+	    !strstr(out, "\ngpon_fec_active{direction=\"ds\"} 1\n") ||
+	    !strstr(out, "\ngpon_counter_sample_fec_active{direction=\"ds\"} 0\n")) {
+		fprintf(stderr, "FAIL: status and counter sample mixed up:\n%s", out);
+		failures++;
+	}
+	/* Before the first sample, and on an odi-oss kernel from before these
+	 * two lines, the counters file has neither. */
+	render("ctr_samples 0\n");
+	if (strstr(out, "gpon_counter_sample_")) {
+		fprintf(stderr, "FAIL: no sample yet, but a sample series:\n%s", out);
+		failures++;
+	}
+	render("ctr_samples 11\nctr ds_gem_idle 5\n");
+	if (strstr(out, "gpon_counter_sample_")) {
+		fprintf(stderr, "FAIL: an older counters file rendered a sample series:\n%s", out);
+		failures++;
+	}
 
 	if (failures) {
 		fprintf(stderr, "test_gpon_link: %d failure(s)\n", failures);

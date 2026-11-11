@@ -141,6 +141,7 @@ From `/proc`, which costs no fork at all:
 | `gpon_boot_count` | `/proc/odi_ramlog_prev` — boots of this image since the last power cycle, this one included |
 | `gpon_last_reset_reason{reason="...",client="..."}` | `/proc/odi_ramlog_prev` — always 1; why the previous boot ended, see below |
 | `gpon_load{1,5,15}` | `/proc/loadavg` |
+| `gpon_cpu_seconds_total{mode="user\|nice\|system\|idle\|iowait\|irq\|softirq\|steal"}` | the first line of `/proc/stat`: CPU time since boot by mode (counter). The kernel prints ticks of 1/100 s (`USER_HZ`, fixed at 100 on MIPS), rendered as seconds; a kernel that prints fewer columns gets fewer modes. `rate()` of a mode is the share of the time spent in it, so `1 - rate(gpon_cpu_seconds_total{mode="idle"}[5m])` is how busy the CPU is, which `gpon_load*` cannot say (below) |
 | `gpon_soc_temperature_celsius` | `/sys/class/hwmon/hwmonN/temp1_input`, the hwmon device named `rtl9602c_soc` (odi-oss kernels that have it; nothing on the stock firmware or an older image) — the SoC die temperature, see below |
 | `gpon_soc_temperature_max_celsius`, `gpon_soc_temperature_crit_celsius` | `temp1_max` and `temp1_crit` in the same hwmon directory (odi-oss defaults 95 and 110 C, on the same unverified scale); absent on an image without them |
 | `gpon_soc_temperature_alarm{level="max\|crit"}` | `temp1_max_alarm` and `temp1_crit_alarm` in the same directory, 0 or 1; each series only when its file exists and parses |
@@ -265,10 +266,13 @@ shows here first, and so does an ONU that says O5 but is no longer served.
 | `gpon_us_bursts_total`, `gpon_us_dbru_total`, `gpon_us_gem_frames_total`, `gpon_us_gem_bytes_total` | `ctr us_*`: what went upstream (bytes include the 5-byte GEM headers) |
 | `gpon_us_ploam_total`, `gpon_us_ploam_by_source_total{source="cpu_normal\|cpu_urgent\|auto_no_message\|auto_serial_number"}` | `ctr us_ploam*` |
 | `gpon_counter_saturated_samples_total{counter}`, `gpon_counter_samples_total` | `ctr_saturated`, `ctr_samples` |
+| `gpon_counter_sample_ds_superframe`, `gpon_counter_sample_fec_active{direction="ds"}` | `ctr_ds_superframe`, `ctr_fec_now` in `counters`: the superframe count and the downstream FEC bit of the sample the totals above are from, so that one scrape pairs them. To put a total in relation to the frames that passed (the idle share of `gpon_ds_gem_frames_total`, say), use this count and not `gpon_ds_superframe`, which is read from `status` and can be a second further on (gauges; absent before the first sample and on an odi-oss kernel without the two lines) |
 | `gpon_alarm_events_total{alarm="los\|lof\|lom"}`, `gpon_alarm_seconds_total{alarm}` | `alarm_events`, `alarm_ms` |
 | `gpon_onu_state_seconds_total{state="O1".."O7"}`, `gpon_onu_state_transitions_total{from,to}` | `onu_state_ms`, `onu_transitions` |
 | `gpon_fec_active{direction="ds\|us"}`, `gpon_ds_superframe` | `fec_now`, `ds_superframe` (gauges) |
 | `gpon_olt_launch_power_dbm`, `gpon_pon_id_odn_class`, `gpon_pon_id_reach_extender` | `pon_id`: the last PON-ID message (G.984.3 Annex C) since the last loss of signal, from an OLT that sends one. The launch power is TOL, 0.1 dB steps above -30 dBm, and is absent when the OLT does not report it (65535); `gpon_olt_launch_power_dbm - gpon_rx_power_dbm` estimates the path loss. Class 0 A, 1 B, 2 B+, 3 C, 4 C+ (gauges; odi-oss with PON-ID decoding) |
+| `gpon_pon_id_received_uptime_seconds` | `pon_id ... ms`: when the last PON-ID message came, as uptime (the driver prints milliseconds since boot). `gpon_uptime_seconds - gpon_pon_id_received_uptime_seconds` is its age: small and steady while the OLT keeps sending it, growing when the launch power above has stood since one message. The driver keeps the time in 32 bits, so it wraps after 49.7 days of uptime. The PON identifier on the same line is not exported (gauge) |
+| `gpon_ranging_eqd_bits` | `ranging_time eqd_bits`: the equalization delay of the last Ranging_Time message, in upstream bit times (0.8 ns each at 1.244 Gbit/s). The OLT sets it at each ranging, so a step in its history can mean a change in the fibre path or at the OLT port; next to the path loss it helps tell the two apart. Absent until a Ranging_Time message came (`ranging_time none`); only this number is read, none of the serial number fields of the lines around it (gauge) |
 | `gpon_ploam_messages_total{direction}`, `gpon_ploam_messages_by_type_total{direction,type}`, `gpon_rei_sent_total`, `gpon_ploam_timer_expiries_total{timer="to1\|to2"}`, `gpon_irq_total`, `gpon_irq_spurious_total`, `gpon_onu_id` | `ploam`, `ploam_type`, `rei_count`, `to1_expiries`, `to2_expiries`, `irq_count`, `irq_spurious`, `onu_id` |
 
 The live LOS, LOF and LOM bits are `gpon_alarm` from `diag` above, not
@@ -562,7 +566,8 @@ table in `src/metrics_body.h` so they cannot drift apart.
 - **`gpon_load*` is pinned and carries no signal.** Linux counts uninterruptible
   tasks in the load average, and this firmware keeps two kernel threads
   (`watchdog`, `led_swBlink`) permanently in D state. Load therefore sits at
-  exactly 2.00 forever. Do not alert on it.
+  exactly 2.00 forever. Do not alert on it; `gpon_cpu_seconds_total` is the
+  measure of CPU use.
 - **`/proc/net/dev` counters are 32-bit** and wrap at 4.29 GB, because
   `struct net_device_stats` uses `unsigned long` on this platform. Prometheus
   cannot distinguish a wrap from a counter reset, so `rate()` undercounts on a

@@ -22,6 +22,7 @@
 #include "soc_temp.h"
 #include "host_link.h"
 #include "respawn_state.h"
+#include "cpu_stat.h"
 #include "provision.h"
 #include "gpon_link.h"
 #include "transceiver.h"
@@ -393,6 +394,21 @@ static void metric_loadavg(int fd)
 		write_all(fd, buf + start, i - start);
 		put_fd(fd, "\n");
 	}
+}
+
+/* The first line of /proc/stat as gpon_cpu_seconds_total (src/cpu_stat.h has
+ * the format and the rendering). One read, cut after the first line or soon
+ * after it: the buffer holds the eight columns at their longest. */
+static void metric_cpu(int fd)
+{
+	char buf[256], out[1024];
+	unsigned long n;
+
+	if (read_file("/proc/stat", buf, sizeof(buf)) <= 0)
+		return;
+	n = cpu_stat_render(buf, out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
 }
 
 static void metric_uptime(int fd)
@@ -1571,6 +1587,7 @@ static void emit_metrics(int fd)
 	metric_uptime(fd);
 	metric_reset_info(fd);
 	metric_loadavg(fd);
+	metric_cpu(fd);
 	metric_soc_temp(fd);
 	metric_meminfo(fd);
 	metric_netdev(fd);

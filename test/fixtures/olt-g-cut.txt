@@ -1,0 +1,8 @@
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+OltG
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+=================================
+EntityId: 0x00
+OltVendorId: 0x48575443
+EquipId: 
+Version: 

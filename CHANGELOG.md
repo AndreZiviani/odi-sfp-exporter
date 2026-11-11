@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `gpon_olt_info{vendor,version,equipment_id}`, 1: what the OLT wrote about
+  itself in the OMCI OLT-G entity (class 131), from `omcicli mib get 131`,
+  in the vendor dump format (`OltVendorId: 0x48575443`, `Version: 10`); the
+  vendor id is decoded from hex up to the first zero byte (`HWTC`), a value
+  that is not printable ASCII is given as hex, an empty one is an empty
+  label. A change shows an OLT replaced or updated. Absent when the entity
+  is, when omcid does not answer, or when the answer is cut off or has lines that
+  look injected. The extra `omcicli` run happens once per registration (the
+  value is dropped when the ONU state transitions in `/proc/odi_gpon/status`
+  change, and read again after an hour), and a failed read is not repeated
+  for a minute. `src/olt_info.h`, tested natively. Refs #32.
 - The image manifest behind `gpon_image_info` is parsed within the bytes
   read from `/etc/odi-build`. A manifest longer than the 511 bytes read used
   to leave the parser one byte past its buffer on the cut last line; that

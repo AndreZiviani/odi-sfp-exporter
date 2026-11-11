@@ -27,6 +27,7 @@
 #include "gpon_link.h"
 #include "transceiver.h"
 #include "image_info.h"
+#include "olt_info.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -1104,6 +1105,47 @@ static void emit_provision_metrics(int fd, int omci_ok)
 	gpon_provision_scrape(&o, read_file, omcicli_provision, omci_ok, buf, sizeof(buf));
 }
 
+/*
+ * gpon_olt_info, from the OLT-G entity: `omcicli mib get 131` (src/olt_info.h,
+ * which also has when it is read: once per registration, again after an hour,
+ * and a failed attempt at most once a minute). A scrape in between costs the
+ * read of /proc/odi_gpon/status and of /proc/uptime, no fork.
+ */
+static struct olt_cache olt_cache;
+
+static void emit_olt_info(int fd, int omci_ok)
+{
+	static char *const argv[] = { "omcicli", "mib", "get", "131", 0 };
+	char buf[4096];
+	unsigned long long key = 0;
+	long now = -1;
+	struct prov_out o;
+
+	if (read_file("/proc/odi_gpon/status", buf, sizeof(buf)) > 0)
+		key = olt_state_key(buf);
+	if (read_file("/proc/uptime", buf, sizeof(buf)) > 0)
+		now = respawn_uptime(buf);
+
+	if (olt_plan(&olt_cache, key, now, omci_ok)) {
+		struct olt_info got;
+		long n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1,
+				    OMCICLI_TIMEOUT_MS);
+		int ok = 0;
+
+		if (n > 0) {
+			buf[n] = 0;
+			ok = olt_parse(buf, &got);
+		}
+		olt_done(&olt_cache, key, now, ok, &got);
+	}
+
+	if (!olt_cache.ok)
+		return;
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	olt_emit(&o, &olt_cache.info);
+}
+
 static void emit_diag_metrics(int fd)
 {
 	static char *const argv[] = { "diag", 0 };
@@ -1548,9 +1590,14 @@ static void emit_metrics(int fd)
 	/* Everything from /bin/diag, in a single fork. */
 	emit_diag_metrics(fd);
 
-	/* And one more fork for the OMCI service table, and one for what the
-	 * OLT provisioned. */
-	emit_provision_metrics(fd, emit_omci_metrics(fd));
+	/* And one more fork for the OMCI service table, one for what the
+	 * OLT provisioned, and, once per registration, one for the OLT-G. */
+	{
+		int omci_ok = emit_omci_metrics(fd);
+
+		emit_provision_metrics(fd, omci_ok);
+		emit_olt_info(fd, omci_ok);
+	}
 
 	/*
 	 * NOT exporting `gpon show counter global ds-eth`. Four consecutive reads

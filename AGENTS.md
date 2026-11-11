@@ -34,6 +34,7 @@ other repo, not here.
     src/gpon_link.h       the GPON link counters, alarm and state times from /proc/odi_gpon/; pure
     src/gpon_flow.h       the per-GEM-port families from /proc/odi_gpon/flows; pure, host-tested
     src/image_info.h      gpon_image_info from /etc/odi-build; pure, host-tested
+    src/olt_info.h        gpon_olt_info from omcicli mib get 131 (OLT-G); pure, host-tested
     src/transceiver.h     the module alarm flags and gpon_transceiver_up from diag pon get transceiver alarm-status; pure, host-tested
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
@@ -48,6 +49,7 @@ other repo, not here.
     test/test_respawn_state.c host-native test for src/respawn_state.h against test/fixtures/respawn, with a golden (`make test`)
     test/test_cpu_stat.c  host-native unit test for src/cpu_stat.h (`make test`)
     test/test_image_info.c host-native unit test for src/image_info.h (`make test`)
+    test/test_olt_info.c  host-native test for src/olt_info.h against test/fixtures/olt-g-*, with goldens (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
     test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens
     test/test_gpon_link.c host-native test for src/gpon_link.h against test/fixtures, with a golden; also the scrape with no /proc files
@@ -84,7 +86,7 @@ other repo, not here.
 
 `make test` is host-native (plain `cc`, no Docker, no qemu-user) — it covers
 `src/wrap.h`, `src/resetinfo.h`, `src/confighash.h`, `src/slot_state.h`, `src/soc_temp.h`, `src/host_link.h`,
-`src/respawn_state.h`, `src/cpu_stat.h`, `src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h`, `src/transceiver.h`, `src/image_info.h` and the `mib_*` tables in
+`src/respawn_state.h`, `src/cpu_stat.h`, `src/provision.h`, `src/gpon_link.h`, `src/gpon_flow.h`, `src/transceiver.h`, `src/image_info.h`, `src/olt_info.h` and the `mib_*` tables in
 `src/metrics_body.h`, which have
 no MIPS-specific code. Everything else is still gated by `make all` (or
 `make release`), run on every push and PR via `.github/workflows/release.yml`,

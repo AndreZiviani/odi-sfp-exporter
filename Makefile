@@ -120,7 +120,7 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat; do \
+	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat test_image_info; do \
 		t=$$(mktemp); \
 		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
 		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \

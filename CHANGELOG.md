@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The image manifest behind `gpon_image_info` is parsed within the bytes
+  read from `/etc/odi-build`. A manifest longer than the 511 bytes read used
+  to leave the parser one byte past its buffer on the cut last line; that
+  line is now dropped, and a last line without a newline in a shorter file
+  is kept. The parser moved to `src/image_info.h` with a host test
+  (`test/test_image_info.c`, also run under AddressSanitizer by hand).
 - `OdiResetLoop` counts only the rises of `gpon_boot_count` (`changes()` minus
   `resets()`). A power cycle drops the count to 1, which made one power cut from
   a count of 4 or more fire the alert; it is now not counted. `docs/ALERTS.md`

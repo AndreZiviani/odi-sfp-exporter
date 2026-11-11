@@ -26,6 +26,7 @@
 #include "provision.h"
 #include "gpon_link.h"
 #include "transceiver.h"
+#include "image_info.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -1180,23 +1181,6 @@ static void emit_diag_metrics(int fd)
 	emit_diag_health(fd, parsed > 0, parsed, expected);
 }
 
-/*
- * A label value must not contain a quote, a backslash or a newline, and this
- * one comes from argv[0] — chosen by whoever started the process, not by us.
- * Escaping it properly would be more code than refusing it: an unexpected path
- * is reported as "unknown" rather than being allowed to produce an exposition
- * Prometheus cannot parse.
- */
-static int label_safe(const char *s)
-{
-	unsigned long i;
-
-	for (i = 0; s[i]; i++)
-		if (s[i] == '"' || s[i] == '\\' || s[i] == '\n' || s[i] == '\r')
-			return 0;
-	return i != 0;
-}
-
 static void metric_build_info(int fd)
 {
 	emit_header(fd, "gpon_exporter_build_info",
@@ -1225,46 +1209,14 @@ static void metric_image_info(int fd)
 {
 	char man[512];
 	long n = read_file("/etc/odi-build", man, sizeof(man));
-	unsigned long i = 0;
-	int first = 1;
+	struct prov_out o;
 
 	if (n <= 0)
 		return;
 
-	emit_header(fd, "gpon_image_info",
-		    "Always 1. Labels name the firmware image this stick was built "
-		    "from and the component builds inside it, from /etc/odi-build.",
-		    "gauge");
-	put_fd(fd, "gpon_image_info{");
-	while (man[i]) {
-		unsigned long ls = i, le = i, eq;
-
-		while (man[le] && man[le] != '\n')
-			le++;
-		eq = ls;
-		while (eq < le && man[eq] != '=')
-			eq++;
-		if (eq == le || eq == ls)
-			goto next;
-
-		/* Both halves have to survive being a label. A stray quote in a
-		 * git describe string would produce an exposition Prometheus
-		 * cannot parse, so the pair is dropped rather than escaped. */
-		man[eq] = 0;
-		man[le] = 0;
-		if (label_safe(man + ls) && label_safe(man + eq + 1)) {
-			if (!first)
-				put_fd(fd, ",");
-			first = 0;
-			put_fd(fd, man + ls);
-			put_fd(fd, "=\"");
-			put_fd(fd, man + eq + 1);
-			put_fd(fd, "\"");
-		}
-next:
-		i = le + 1;
-	}
-	put_fd(fd, "} 1\n");
+	o.put = prov_put_fd;
+	o.ctx = &fd;
+	image_info_emit(&o, man, (unsigned long)n, (unsigned long)n == sizeof(man) - 1);
 }
 
 /*

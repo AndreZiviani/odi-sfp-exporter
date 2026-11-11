@@ -426,10 +426,12 @@ groups:
             Clears an hour after the boot.
 
       # gpon_boot_count counts boots since the last power cycle; three more
-      # in an hour is a reset loop.
+      # in an hour is a reset loop. A power cycle drops it back to 1, which
+      # resets() counts and changes() counts as a change too, so the rises
+      # are changes() minus resets(): a power cut alone is never a reset.
       - alert: OdiResetLoop
         expr: |
-          max_over_time(gpon_boot_count[1h]) - min_over_time(gpon_boot_count[1h]) >= 3
+          changes(gpon_boot_count[1h]) - resets(gpon_boot_count[1h]) >= 3
         labels:
           severity: critical
         annotations:

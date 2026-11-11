@@ -109,7 +109,7 @@ long before it crosses an absolute limit.
 | alert | severity | fires when |
 |---|---|---|
 | `OdiWatchdogReset` | warning | the previous boot ended in `wdt_*`, `panic` or `oops` (`gpon_last_reset_reason`), for the first hour after the boot |
-| `OdiResetLoop` | critical | `gpon_boot_count` rose by 3 or more within an hour |
+| `OdiResetLoop` | critical | `gpon_boot_count` rose 3 or more times within an hour (a drop to 1 after a power cycle is not counted) |
 | `OdiRebooted` | info | uptime under 10 min: any reboot, asked for or not |
 | `OdiMemoryLow` | warning | free + buffers + cached under 4 MiB for 10 min |
 | `OdiUncommittedImage` | warning | `gpon_uncommitted` is 1 for 30 min: a trial boot nobody committed, so the next reset boots the other slot |
@@ -122,7 +122,10 @@ from odi-oss `/proc/odi_ramlog_prev` and need both an exporter release that
 exports them and an odi-oss image whose kernel has the ramlog. Without them
 `OdiWatchdogReset` and `OdiResetLoop` never fire; the other rules are
 unaffected. A power cycle clears the ramlog, so `gpon_boot_count` restarts at
-1 and a power cycle is never reported as a reset.
+1; `OdiResetLoop` counts only the rises (`changes()` minus `resets()`), so a
+power cycle is not counted as a reset. The boot that follows the power cycle
+is not counted either, only the reboots after it. A reboot that happens
+between two scrapes counts once even if the count rose by more.
 
 `OdiMemoryLow` is a margin above the odi-oss kernel watchdog memory floor,
 which resets the stick when `MemAvailable` stays under 2048 KB.

@@ -96,7 +96,7 @@ struct octet_state {
  */
 static int port_index(const char *port, unsigned long plen)
 {
-	if (plen != 1 || port[0] < '0' || port[0] > '9')
+	if (plen != 1 || port[0] < '0' || port[0] >= '0' + MIB_MAX_PORTS)
 		return -1;
 	return port[0] - '0';
 }

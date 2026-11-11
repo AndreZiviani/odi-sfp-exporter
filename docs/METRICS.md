@@ -221,6 +221,7 @@ each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon/status`:
 | `gpon_provision_traffic_descriptor_{cir,pir}_bytes_per_second{descriptor}` | same -- each descriptor's committed and peak rate, bytes/s (G.988) |
 | `gpon_provision_mib_entities` | same -- entities the OLT created or wrote |
 | `gpon_provision_mib_data_sync` | same -- the MIB data sync counter, 0 after a MIB reset |
+| `gpon_olt_info{vendor,version,equipment_id}` | `omcicli mib get 131` -- the OLT-G entity, see "The OLT" below |
 
 The `gpon_provision_*` families say what the ISP provisioned, so a plan change
 is a label or a value that changed on a graph, not a guess: a new speed tier is
@@ -238,6 +239,44 @@ one on the vendor `omci_app` has no `provision` command, and a stuck omcid
 (`gpon_omci_up 0`) is not asked a second time; each case leaves those
 families absent, never zero. The parsing is `src/provision.h`, tested
 natively against fixtures and goldens (`test/test_provision.c`).
+
+### The OLT
+
+`gpon_olt_info{vendor,version,equipment_id}` is 1, with what the OLT wrote
+about itself in the OMCI OLT-G entity (class 131), from `omcicli mib get 131`.
+`omcicli` prints it in the vendor's dump format (`OltVendorId: 0x48575443`,
+`EquipId: `, `Version: 10`, then `ToDInfo:`): the vendor id is the hex of four
+ASCII bytes, decoded up to the first zero byte (`HWTC`); the equipment ID and
+version are text, trimmed. An empty or all-zero one is an empty label, and one
+that is not printable ASCII or has a quote or backslash in it is given as
+lowercase hex instead of being dropped. The three lines must follow one
+another in that order, with `ToDInfo:` after them; a newline inside a value
+breaks that and the family is absent. It is also absent when the entity is
+(`0 rows`: the OLT has not provisioned yet, or the stock firmware has no such
+`omcicli`), when omcid has not answered, or when the answer is cut off. The
+other tool's form (`omcli mib`, padded names and hex values) is not read.
+
+```promql
+count by (instance) (last_over_time(gpon_olt_info[7d])) > 1   # more than one OLT identity in a week
+count by (vendor) (gpon_olt_info)        # sticks per OLT vendor
+```
+
+Cardinality is one series per stick, a new one only when the OLT changes
+(the old one goes stale; the value is always 1, so `changes()` of it says
+nothing, and the query above counts the label sets seen in the window); the
+vendor strings are the OLT's own, so the label values are not a fixed set.
+Cost: one more `omcicli` fork, but not on every scrape. The answer is kept
+until the sum of the `onu_transitions` counts in `/proc/odi_gpon/status`
+moves, because the OLT can only change across a re-registration; at that
+moment the old value is dropped, so the family is absent until a read
+succeeds, never the old OLT. It is also read again after an hour, in case
+those counts restarted at the same sum (odi-oss zeroes them when the driver
+is initialised, which is at boot). A read that fails, or finds no entity, is
+not repeated for a minute unless the counts move again, so an image without
+OLT-G costs at most one bounded (2 s) `omcicli` run a minute, whatever the
+scrape interval; on an image without the status file the answer is kept for
+a minute only. Between reads a scrape costs two small file reads. The
+parsing is `src/olt_info.h`, tested natively (`test/test_olt_info.c`).
 
 ### The GPON link
 

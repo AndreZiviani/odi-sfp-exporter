@@ -1,0 +1,13 @@
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+OltG
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+=================================
+EntityId: 0x00
+OltVendorId: 0x4142ff00
+EquipId: OLT-200"
+Version: ÿv2
+ToDInfo:
+	Sequence number of GEM superframe: 0x0
+	Timestamp: secs 0, nanosecs 0
+=================================
+1 row

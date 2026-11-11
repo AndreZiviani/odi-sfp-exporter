@@ -1,0 +1,2 @@
+no managed entity called Foo
+0 rows

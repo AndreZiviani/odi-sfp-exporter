@@ -1,0 +1,11 @@
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+OltG
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+=================================
+EntityId: 0x00
+OltVendorId: 0x41424344
+EquipId: a
+Version: evil
+Version: 10
+ToDInfo:
+1 row

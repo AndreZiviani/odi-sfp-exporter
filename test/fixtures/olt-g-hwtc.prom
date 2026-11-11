@@ -1,0 +1,3 @@
+# HELP gpon_olt_info Always 1. Labels are what the OLT wrote about itself in the OMCI OLT-G entity (class 131), from `omcicli mib get 131`: vendor, version and equipment_id as text, or as hex when not printable.
+# TYPE gpon_olt_info gauge
+gpon_olt_info{vendor="HWTC",version="10",equipment_id=""} 1

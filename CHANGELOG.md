@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.10.0 (2026-11-11)
+
 - `gpon_olt_info{vendor,version,equipment_id}`, 1: what the OLT wrote about
   itself in the OMCI OLT-G entity (class 131), from `omcicli mib get 131`,
   in the vendor dump format (`OltVendorId: 0x48575443`, `Version: 10`); the

@@ -24,6 +24,10 @@
   `docs/METRICS.md#the-minute-history`. `src/history.h`, tested natively
   against a full diag reply (`test/fixtures/diag-reply.txt`). Refs
   AndreZiviani/odi-ui#98.
+- metricsd waits 100 ms after a failed `accept()` before polling again. A
+  lasting error (out of file descriptors or memory) leaves the connection
+  queued, so the listening socket stays readable and the loop used to spin
+  without a pause.
 
 ## v1.10.0 (2026-11-11)
 

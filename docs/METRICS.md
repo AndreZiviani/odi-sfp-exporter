@@ -576,6 +576,61 @@ string** to split sections; if that ever changes, metrics go absent rather than
 wrong. The command list and the strings matched against it are built from one
 table in `src/metrics_body.h` so they cannot drift apart.
 
+## The minute history
+
+Besides answering scrapes, metricsd keeps a short history on the stick
+itself, for a look back after a drop that no Prometheus recorded. Once a
+minute it asks diag a smaller set of the scrape's questions (the four optics
+readings, the ONU state, the GPON alarms and the switch counters), reads
+`/proc/odi_gpon/status` and `counters`, `/proc/stat`, `/proc/meminfo` and
+`/proc/uptime`, and appends one line to `/var/run/history`. The file keeps
+the newest 120 lines, two hours in about 20 KB of tmpfs, and is replaced by
+rename, so a reader never sees half a write. Nothing leaves the stick and
+nothing survives a reboot; a restarted metricsd carries on the ring it
+finds and takes its next sample a minute after the newest line.
+
+The sample and a scrape run in the same process, one after the other, so
+this process never runs two diags at once. A sample still starts its own
+diag, as a scrape does. The minute is timed by `/proc/uptime`, not by the
+wall clock, which jumps when NTP sets it; while `/proc/uptime` cannot be
+read no sample is taken. A client that connects and sends nothing is
+closed after 5 s, so it cannot hold up a sample; a client that reads
+slowly can still delay one by the time its scrape takes.
+
+One process writes the file: the one holding an `flock` on
+`/var/run/history.lock`. A second metricsd, such as a copy started by hand
+on another port, serves scrapes but leaves the history alone, and takes it
+over at its next minute once the first one is gone. Stopping metricsd stops
+the sampling but leaves the file with its last two hours in place.
+
+The odi-ui Status page draws the file (`GET /api/history`), and the odi-oss
+diagnostics bundle carries it as `history.txt`. A line is space-separated
+`key=value` pairs, oldest line first; a key whose source is missing is left
+out, never written as 0, and a reader skips keys it does not know:
+
+| key | value |
+|---|---|
+| `t` | wall clock, epoch seconds (meaningless until NTP has set it) |
+| `up` | `/proc/uptime`, whole seconds |
+| `st` | ONU state, 1 to 7; from diag, else `/proc/odi_gpon/status` |
+| `al` | asserted GPON alarms, comma separated (`LOS,LOF`), or `-` |
+| `rx` `tx` | receive and transmit power, dBm, two decimals |
+| `tc` `bi` | module temperature (C) and bias current (mA), two decimals |
+| `di` `do` | octets in and out of switch port 2, the fibre side; totals |
+| `los` `lof` `lom` | alarm events since the driver loaded (odi-oss) |
+| `o5i` `o5o` | transitions into and out of O5 since then, so a drop between two samples shows even when both read O5 (odi-oss; left out when the driver printed no counter block) |
+| `bip` `fecu` | downstream BIP error bits and uncorrectable FEC codewords; totals (odi-oss) |
+| `cb` `ct` | CPU ticks busy (all but idle and iowait) and in all, `/proc/stat` |
+| `ma` | MemAvailable, kB |
+
+Totals stay totals; the reader takes the difference between two lines.
+A line is at most 511 bytes, which holds every key at its longest, so the
+file is at most 60 KiB; a sample that would not fit is dropped whole rather
+than cut.
+`src/history.h` builds the line and keeps the ring, and
+`test/test_history.c` checks it against a full diag reply
+(`test/fixtures/diag-reply.txt`), a stock slot, a failed diag and LOS.
+
 ## Known caveats
 
 - **`kind="oversize"` was removed from `gpon_port_receive_errors_total` in

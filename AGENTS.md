@@ -22,7 +22,7 @@ other repo, not here.
 
 ## Layout
 
-    src/metricsd.c        the exporter: socket, accept loop, HTTP response
+    src/metricsd.c        the exporter: socket, accept loop, HTTP response, the minute history
     src/metrics_body.h    the metrics themselves; every metric name lives here,
                           except the gpon_provision_* and GPON link families
     src/slot_state.h      the boot-slot metrics from odi-oss /var/run/odi-slot; pure, host-tested
@@ -36,6 +36,7 @@ other repo, not here.
     src/image_info.h      gpon_image_info from /etc/odi-build; pure, host-tested
     src/olt_info.h        gpon_olt_info from omcicli mib get 131 (OLT-G); pure, host-tested
     src/transceiver.h     the module alarm flags and gpon_transceiver_up from diag pon get transceiver alarm-status; pure, host-tested
+    src/history.h         the minute history in /var/run/history: line and ring; pure, host-tested
     src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
@@ -50,6 +51,7 @@ other repo, not here.
     test/test_cpu_stat.c  host-native unit test for src/cpu_stat.h (`make test`)
     test/test_image_info.c host-native unit test for src/image_info.h (`make test`)
     test/test_olt_info.c  host-native test for src/olt_info.h against test/fixtures/olt-g-*, with goldens (`make test`)
+    test/test_history.c   host-native test for src/history.h against test/fixtures/diag-reply.txt (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
     test/test_silent_client.py  the accept loop under qemu-user with a silent client (`make silent-client-test`)
     test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens

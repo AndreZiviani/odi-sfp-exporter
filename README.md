@@ -36,6 +36,10 @@ gpon_provision_vlan_info{vlan="10",source="vlan_filter"} 1
 gpon_provision_traffic_descriptor_pir_bytes_per_second{descriptor="1"} 62500000
 ```
 
+Once a minute it also writes a line to `/var/run/history`, a two-hour ring on
+the stick that the odi-ui Status page draws, for a look back after a drop
+nobody was scraping ([the minute history](docs/METRICS.md#the-minute-history)).
+
 See [docs/METRICS.md](docs/METRICS.md) for the full metric reference,
 [docs/ALERTS.md](docs/ALERTS.md) for ready-made Prometheus alerting rules
 ([`prometheus/alerts.yml`](prometheus/alerts.yml)),

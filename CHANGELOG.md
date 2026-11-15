@@ -11,6 +11,19 @@
   rest of that scrape is skipped, diag and omcicli included. A client that
   hangs up before its request gets no answer. `make silent-client-test` runs
   the accept loop under qemu-user with a silent client in front of a scrape.
+- metricsd keeps a minute history in `/var/run/history`: once a minute it
+  asks diag for the optics, the ONU state, the GPON alarms and the switch
+  counters, reads `/proc/odi_gpon/status` and `counters`, `/proc/stat` and
+  `/proc/meminfo`, and appends one `key=value` line. The ring keeps 120
+  lines (two hours, about 20 KB of tmpfs), is replaced by rename, and is
+  carried on after a restart. The sample runs between scrapes in the same
+  process, timed by `/proc/uptime`, so the request timeout above also keeps
+  a silent client from holding it up; one metricsd writes it (an `flock` on
+  `/var/run/history.lock`). The odi-ui Status page draws it and the
+  odi-oss diagnostics bundle carries it; the keys are in
+  `docs/METRICS.md#the-minute-history`. `src/history.h`, tested natively
+  against a full diag reply (`test/fixtures/diag-reply.txt`). Refs
+  AndreZiviani/odi-ui#98.
 
 ## v1.10.0 (2026-11-11)
 

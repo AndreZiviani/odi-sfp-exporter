@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- A client that connects and sends nothing no longer holds every scrape
+  behind it. The listener is serial, and `serve()` blocked in `read()` until
+  that client hung up. It now waits 5 s for the request and closes the
+  connection unanswered after that. A client that stops reading the
+  response is cut off after one write blocks for 10 s, and one that reads
+  only a trickle once the response is not done 30 s after the request. The
+  rest of that scrape is skipped, diag and omcicli included. A client that
+  hangs up before its request gets no answer. `make silent-client-test` runs
+  the accept loop under qemu-user with a silent client in front of a scrape.
+
 ## v1.10.0 (2026-11-11)
 
 - `gpon_olt_info{vendor,version,equipment_id}`, 1: what the OLT wrote about

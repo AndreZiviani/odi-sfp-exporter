@@ -24,6 +24,17 @@
 #define DEFAULT_PORT 9100
 #define BACKLOG      8
 
+/* The listener is serial, so one client holds every scrape behind it. A
+ * client that connects and sends nothing gets REQUEST_WAIT_MS to start its
+ * request and is then closed unanswered; Prometheus sends its GET at once.
+ * A client that stops reading the response is cut off after SEND_WAIT_S on
+ * one write, and one that reads only a trickle once the response is not
+ * done SEND_DEADLINE_S after the request came in (write_all() then skips
+ * the rest of that scrape). A scrape takes a few seconds. */
+#define REQUEST_WAIT_MS 5000
+#define SEND_WAIT_S     10
+#define SEND_DEADLINE_S 30
+
 static unsigned long parse_u16(const char *s, unsigned long fallback)
 {
 	unsigned long v = 0;
@@ -45,11 +56,34 @@ static unsigned long parse_u16(const char *s, unsigned long fallback)
 static void serve(int conn)
 {
 	char req[512];
+	struct pollfd pfd;
+	long tv[2] = { SEND_WAIT_S, 0 };   /* struct timeval on o32 */
+	long now;
+
+	write_failed_fd = -1;
+	pfd.fd = conn;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	/* Only an actual request is answered: poll also returns for a client
+	 * that hung up or errored, and then the read gives 0 or an error. */
+	if (syscall3(__NR_poll, (long)&pfd, 1, REQUEST_WAIT_MS) <= 0 ||
+	    !(pfd.revents & POLLIN))
+		return;
+	__syscall6(__NR_setsockopt, conn, SOL_SOCKET, SO_SNDTIMEO,
+		   (long)tv, sizeof(tv), 0);
 
 	/* Read the request and discard it: we answer the same on every path.
 	 * Draining it matters anyway — replying to an unread request invites the
-	 * client's close to arrive as an RST that discards our response. */
-	syscall3(__NR_read, conn, (long)req, sizeof(req) - 1);
+	 * client's close to arrive as an RST that discards our response. The
+	 * poll above means this read does not block. */
+	if (syscall3(__NR_read, conn, (long)req, sizeof(req) - 1) <= 0)
+		return;
+
+	now = mono_s();
+	if (now >= 0) {
+		write_deadline_fd = conn;
+		write_deadline_s = now + SEND_DEADLINE_S;
+	}
 
 	put_fd(conn,
 	       "HTTP/1.0 200 OK\r\n"
@@ -127,5 +161,8 @@ int main(int argc, char **argv)
 
 		serve((int)conn);
 		syscall3(__NR_close, conn, 0, 0);
+		/* The number goes back to the pool; a later file may get it. */
+		write_failed_fd = -1;
+		write_deadline_fd = -1;
 	}
 }

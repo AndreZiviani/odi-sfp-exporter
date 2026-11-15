@@ -1085,6 +1085,10 @@ static long omcicli_provision(char *buf, unsigned long cap)
 {
 	static char *const argv[] = { "omcicli", "provision", 0 };
 
+	/* Called after the /proc metrics of the same block: once one of
+	 * those writes failed, nobody reads the answer. */
+	if (write_failed_fd >= 0)
+		return -1;
 	return run_to_buf(OMCICLI_PATH, argv, buf, cap, OMCICLI_TIMEOUT_MS);
 }
 
@@ -1587,15 +1591,26 @@ static void emit_metrics(int fd)
 	metric_netdev(fd);
 	metric_config(fd);
 
+	/* The rest forks diag and omcicli. Once a write has failed nobody reads
+	 * the answer, so skip them rather than hold the listener for nothing. */
+	if (fd == write_failed_fd)
+		return;
+
 	/* Everything from /bin/diag, in a single fork. */
 	emit_diag_metrics(fd);
+	if (fd == write_failed_fd)
+		return;
 
 	/* And one more fork for the OMCI service table, one for what the
 	 * OLT provisioned, and, once per registration, one for the OLT-G. */
 	{
 		int omci_ok = emit_omci_metrics(fd);
 
+		if (fd == write_failed_fd)
+			return;
 		emit_provision_metrics(fd, omci_ok);
+		if (fd == write_failed_fd)
+			return;
 		emit_olt_info(fd, omci_ok);
 	}
 

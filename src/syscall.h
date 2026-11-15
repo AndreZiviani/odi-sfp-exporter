@@ -166,11 +166,40 @@ __attribute__((unused)) static unsigned long str_len(const char *s)
 	return n;
 }
 
+/*
+ * Seconds on the monotonic clock, or -1 if the kernel offers neither call.
+ * clock_gettime64 (4000 + 403) fills a struct __kernel_timespec, two 64-bit
+ * fields; on this big-endian CPU the low word of tv_sec is ts[1]. The old
+ * clock_gettime (4000 + 263) is the fallback for a kernel built without it.
+ * Monotonic, so a clock step from NTP cannot stretch or cut a deadline.
+ */
+#define __NR_clock_gettime   4263
+#define __NR_clock_gettime64 4403
+#define CLOCK_MONOTONIC      1
+
+__attribute__((unused)) static long mono_s(void)
+{
+	long ts[4];
+
+	if (syscall3(__NR_clock_gettime64, CLOCK_MONOTONIC, (long)ts, 0) == 0)
+		return ts[1];
+	if (syscall3(__NR_clock_gettime, CLOCK_MONOTONIC, (long)ts, 0) == 0)
+		return ts[0];
+	return -1;
+}
+
 /* The descriptor whose last write failed, or -1. Every later write to it
  * fails at once: a scrape is hundreds of writes, and a client that stopped
  * reading would otherwise cost the send timeout on each of them. metricsd
  * clears it for every new connection. */
 static int write_failed_fd = -1;
+
+/* A descriptor that must be written by a deadline, in mono_s() seconds, or
+ * -1. A client that reads a little now and then gets a partial write each
+ * time and so never runs into the send timeout; the deadline bounds the
+ * whole response. Past it, the write fails as above. */
+static int  write_deadline_fd = -1;
+static long write_deadline_s;
 
 static long write_all(int fd, const char *buf, unsigned long len)
 {
@@ -179,8 +208,17 @@ static long write_all(int fd, const char *buf, unsigned long len)
 	if (fd == write_failed_fd)
 		return -1;
 	while (done < len) {
-		long n = syscall3(__NR_write, fd, (long)(buf + done), len - done);
+		long n;
 
+		if (fd == write_deadline_fd) {
+			long now = mono_s();
+
+			if (now >= 0 && now >= write_deadline_s) {
+				write_failed_fd = fd;
+				return -1;
+			}
+		}
+		n = syscall3(__NR_write, fd, (long)(buf + done), len - done);
 		if (n <= 0) {
 			write_failed_fd = fd;
 			return n;

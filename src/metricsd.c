@@ -24,6 +24,14 @@
 #define DEFAULT_PORT 9100
 #define BACKLOG      8
 
+/* The listener is serial, so one client holds every scrape behind it. A
+ * client that connects and sends nothing gets REQUEST_WAIT_MS to start its
+ * request and is then closed unanswered; Prometheus sends its GET at once.
+ * A client that stops reading the response is cut off after SEND_WAIT_S on
+ * one write (write_all() then skips the rest of that scrape). */
+#define REQUEST_WAIT_MS 5000
+#define SEND_WAIT_S     10
+
 static unsigned long parse_u16(const char *s, unsigned long fallback)
 {
 	unsigned long v = 0;
@@ -45,10 +53,22 @@ static unsigned long parse_u16(const char *s, unsigned long fallback)
 static void serve(int conn)
 {
 	char req[512];
+	struct pollfd pfd;
+	long tv[2] = { SEND_WAIT_S, 0 };   /* struct timeval on o32 */
+
+	write_failed_fd = -1;
+	pfd.fd = conn;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	if (syscall3(__NR_poll, (long)&pfd, 1, REQUEST_WAIT_MS) <= 0)
+		return;
+	__syscall6(__NR_setsockopt, conn, SOL_SOCKET, SO_SNDTIMEO,
+		   (long)tv, sizeof(tv), 0);
 
 	/* Read the request and discard it: we answer the same on every path.
 	 * Draining it matters anyway — replying to an unread request invites the
-	 * client's close to arrive as an RST that discards our response. */
+	 * client's close to arrive as an RST that discards our response. The
+	 * poll above means this read does not block. */
 	syscall3(__NR_read, conn, (long)req, sizeof(req) - 1);
 
 	put_fd(conn,

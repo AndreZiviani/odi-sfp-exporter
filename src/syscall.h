@@ -77,6 +77,7 @@ struct pollfd {
 #define SOCK_STREAM   2       /* generic ABI says 1 */
 #define SOL_SOCKET    65535   /* generic ABI says 1 */
 #define SO_REUSEADDR  4
+#define SO_SNDTIMEO   0x1005  /* generic ABI says 21 */
 
 /* Defined in start.S — only setsockopt needs more than three arguments. */
 extern long __syscall6(long n, long a, long b, long c, long d, long e, long f);
@@ -165,15 +166,25 @@ __attribute__((unused)) static unsigned long str_len(const char *s)
 	return n;
 }
 
+/* The descriptor whose last write failed, or -1. Every later write to it
+ * fails at once: a scrape is hundreds of writes, and a client that stopped
+ * reading would otherwise cost the send timeout on each of them. metricsd
+ * clears it for every new connection. */
+static int write_failed_fd = -1;
+
 static long write_all(int fd, const char *buf, unsigned long len)
 {
 	unsigned long done = 0;
 
+	if (fd == write_failed_fd)
+		return -1;
 	while (done < len) {
 		long n = syscall3(__NR_write, fd, (long)(buf + done), len - done);
 
-		if (n <= 0)
+		if (n <= 0) {
+			write_failed_fd = fd;
 			return n;
+		}
 		done += (unsigned long)n;
 	}
 	return (long)done;

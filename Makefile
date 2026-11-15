@@ -90,7 +90,7 @@ else
 
 RUN   := docker run --rm -v "$(CURDIR)":/src -w /src $(IMAGE)
 
-.PHONY: all httpd image verify isa test rules run deploy shell clean release sums
+.PHONY: all httpd image verify isa test silent-client-test rules run deploy shell clean release sums
 
 # What you almost always want: the exporter, checked.
 all: httpd verify isa test
@@ -159,6 +159,11 @@ isa: image
 # `mul` and `clz` that trap on real hardware. Use `make isa` for that.
 run: image
 	@$(RUN) qemu-mips-static $(BIN) $(ARGS)
+
+# The accept loop under qemu-user: a client that connects and sends nothing
+# must not hold the scrapes behind it (test/test_silent_client.py).
+silent-client-test: httpd
+	$(RUN) python3 test/test_silent_client.py $(BIN)
 
 ## --- moving files ------------------------------------------------------------
 

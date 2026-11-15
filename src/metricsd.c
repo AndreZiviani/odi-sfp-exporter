@@ -156,8 +156,14 @@ int main(int argc, char **argv)
 
 	for (;;) {
 		conn = syscall3(__NR_accept, fd, 0, 0);
-		if (conn < 0)
-			continue;	/* EINTR and friends: keep serving */
+		if (conn < 0) {
+			/* EINTR and friends: keep serving. A lasting error
+			 * (EMFILE, ENOMEM) leaves the connection queued, so
+			 * accept fails again at once: wait a little first,
+			 * or the loop spins a CPU the stick does not have. */
+			syscall3(__NR_poll, 0, 0, 100);
+			continue;
+		}
 
 		serve((int)conn);
 		syscall3(__NR_close, conn, 0, 0);

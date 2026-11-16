@@ -11,6 +11,10 @@
   rest of that scrape is skipped, diag and omcicli included. A client that
   hangs up before its request gets no answer. `make silent-client-test` runs
   the accept loop under qemu-user with a silent client in front of a scrape.
+- metricsd waits 100 ms after a failed `accept()` before trying again. A
+  lasting error (out of file descriptors or memory) leaves the connection
+  queued, so `accept()` failed again at once and the loop spun without a
+  pause.
 
 ## v1.10.0 (2026-11-11)
 

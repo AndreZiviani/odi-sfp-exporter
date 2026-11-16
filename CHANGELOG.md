@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.11.0 (2026-11-16)
+
 - A client that connects and sends nothing no longer holds every scrape
   behind it. The listener is serial, and `serve()` blocked in `read()` until
   that client hung up. It now waits 5 s for the request and closes the

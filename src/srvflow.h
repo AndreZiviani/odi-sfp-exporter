@@ -15,7 +15,8 @@
  * those, while omcid was gone. A row cut before its Used value is no answer
  * either. Nor is a text in which omcicli says the dump may be incomplete
  * (odi-oss omcicli: the daemon did not answer the barrier after the rows,
- * stopped answering mid-stream, or the barrier could not be sent): rows
+ * stopped answering mid-stream, sent a reply out of order, which means a
+ * chunk was lost, or the barrier could not be sent): rows
  * before such a line may not be all of them, and a count from them would
  * say "no services" for a service whose row did not come.
  *
@@ -89,6 +90,7 @@ static int srvflow_incomplete_line(const char *l)
 {
 	return srvflow_starts(l, "% the daemon did not answer") ||
 	       srvflow_starts(l, "% the daemon stopped answering") ||
+	       srvflow_starts(l, "% reply out of order") ||
 	       srvflow_starts(l, "% could not send the completion barrier");
 }
 

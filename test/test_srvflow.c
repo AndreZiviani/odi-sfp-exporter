@@ -89,6 +89,8 @@ int main(void)
 	   -1, "an unused row, then the dump may be incomplete: no count");
 	ck(srvflow_used("SERVID 0: Used: 1, (DIR=1)\n% the daemon stopped answering mid-stream\n"),
 	   -1, "a used row, then the daemon stopped mid-stream: no count either");
+	ck(srvflow_used("SERVID 0: Used: 1, (DIR=1)\n% reply out of order (seq 3, wanted 2)\n"),
+	   -1, "a used row, then a reply out of order (a chunk lost): no count");
 	ck(srvflow_used("SERVID 0: Used: 1, (DIR=1)\n1 service\n% could not send the completion barrier\n"),
 	   -1, "even with a count line before it");
 	ck(srvflow_used("SERVID 0: Used: 1, (DIR=1)\n% note: reply echoes command 2, not 3\n1 service\n"),

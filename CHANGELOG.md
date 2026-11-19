@@ -19,9 +19,10 @@
   omci_app) or the count line odi-oss omcid ends with (`0 services`),
   whose number is then the count; the reading is `src/srvflow.h`, tested
   by `test/test_srvflow.c`. A text in which omcicli says the dump may be
-  incomplete (no answer to its barrier, the daemon stopped mid-stream) is
-  no answer either, rows before that line or not: a count from them could
-  miss the row in use. The provisioning and OLT-G reads are skipped after
+  incomplete (no answer to its barrier, the daemon stopped mid-stream, a
+  reply out of order) is no answer either, rows before that line or not:
+  a count from them could miss the row in use. The vendor omcicli says
+  nothing when its dump is cut short; METRICS.md says so. The provisioning and OLT-G reads are skipped after
   such an error, as after a timeout. The OdiOmciDown description lists
   what to check instead of saying which of them it is.
 

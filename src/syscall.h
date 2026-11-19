@@ -198,6 +198,12 @@ __attribute__((unused)) static long mono_s(void)
  */
 __attribute__((unused)) static int mono_ms(unsigned long *out)
 {
+#ifdef METRICSD_TEST_NO_CLOCK
+	/* The test build of a kernel that offers neither call
+	 * (build/metricsd-noclock, make omcicli-test). */
+	(void)out;
+	return 0;
+#else
 	long ts[4];
 
 	if (syscall3(__NR_clock_gettime64, CLOCK_MONOTONIC, (long)ts, 0) == 0) {
@@ -209,6 +215,7 @@ __attribute__((unused)) static int mono_ms(unsigned long *out)
 		return 1;
 	}
 	return 0;
+#endif
 }
 
 /*
@@ -515,6 +522,7 @@ static long run_to_buf(const char *path, char *const argv[],
  * could be started. Without a clock the deadline is a budget of waits of
  * FEED_SLICE_MS, each charged in full, and each wake reads what is already
  * there: still finite, if shorter for a child that writes in many pauses.
+ * A wait that ends quiet goes on to the next one while budget is left.
  */
 __attribute__((unused))
 static long run_to_feed(const char *path, char *const argv[], int timeout_ms,
@@ -523,7 +531,7 @@ static long run_to_feed(const char *path, char *const argv[], int timeout_ms,
 {
 	char chunk[512];
 	int fds[2];
-	long pid, status = 0, got = 0, budget = timeout_ms, wait;
+	long pid, status = 0, got = 0, budget = timeout_ms, wait, ready;
 	unsigned long t0 = 0;
 	int clock = mono_ms(&t0), eof = 0;
 
@@ -556,11 +564,17 @@ static long run_to_feed(const char *path, char *const argv[], int timeout_ms,
 		pfd.revents = 0;
 		wait = deadline_wait(clock, t0, timeout_ms, &budget,
 				     clock ? timeout_ms : FEED_SLICE_MS);
-		if (!wait || syscall3(__NR_poll, (long)&pfd, 1, wait) <= 0) {
+		ready = wait ? syscall3(__NR_poll, (long)&pfd, 1, wait) : 0;
+		if (!wait || ready < 0) {
 			syscall3(__NR_close, fds[0], 0, 0);
 			kill_and_reap(pid);
 			return -2;
 		}
+		/* A wait that ended quiet: the deadline decides, on the next
+		 * turn. Without a clock that wait was one slice of the budget,
+		 * not the end of it. */
+		if (!ready)
+			continue;
 		/* This read, and whatever else is there already. */
 		do {
 			long n = syscall3(__NR_read, fds[0], (long)chunk, sizeof(chunk));

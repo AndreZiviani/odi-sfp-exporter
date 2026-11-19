@@ -14,6 +14,7 @@ import time
 
 PORT = 19101
 BIN = sys.argv[1]
+NOCLOCK = sys.argv[2] if len(sys.argv) > 2 else None
 STUB = "/bin/omcicli"
 
 if os.path.exists(STUB):
@@ -27,6 +28,8 @@ odi_two = ("SERVID 0: Used: 1, (DIR=1, USFID=0, DSFID=1, SERVID=0, UNIMASK=1)\n"
            "SERVID 3: Used: 1, (DIR=1, USFID=2, DSFID=3, SERVID=3, UNIMASK=1)\n"
            "    rule_gen 1  stagMode 0  ctagMode 1  tag_count 1  out_tag (pri 0, vid 8)\n"
            "2 services\n")
+
+half = vendor.index("SERVID 128:")
 
 # (what, the shell for `dump srvflow`, gpon_omci_up, gpon_omci_services)
 # None means the line is absent.
@@ -45,6 +48,18 @@ CASES = [
      "%% the daemon did not answer; the dump may be incomplete\\n'; exit 1", "0", None),
 ]
 
+# The same from a build without a clock: the 2 s are then a budget of
+# 100 ms waits. A wait that ended quiet killed omcicli, so an answer with a
+# pause in it came out as down.
+NOCLOCK_CASES = [
+    ("no clock: an answer after half a second of quiet",
+     "sleep 0.5\ncat <<'X'\n" + odi_two + "X\n", "1", "2"),
+    ("no clock: the vendor dump with a pause in the middle",
+     "cat <<'X'\n" + vendor[:half] + "X\nsleep 0.3\ncat <<'X'\n" + vendor[half:] + "X\n",
+     "1", "1"),
+    ("no clock: no answer within the bound", "exec sleep 10", "0", None),
+]
+
 
 def scrape():
     c = socket.create_connection(("127.0.0.1", PORT), timeout=30)
@@ -59,12 +74,12 @@ def scrape():
     return data.split(b"\r\n\r\n", 1)[-1].decode()
 
 
-def start(sigchld_ignored=False):
+def start(sigchld_ignored=False, binary=BIN):
     # A launcher that ignores SIGCHLD makes the kernel reap metricsd's
     # children on its own: waitpid() then answers ECHILD for a child that
     # has exited.
     pre = (lambda: signal.signal(signal.SIGCHLD, signal.SIG_IGN)) if sigchld_ignored else None
-    p = subprocess.Popen(["qemu-mips-static", BIN, str(PORT)], preexec_fn=pre,
+    p = subprocess.Popen(["qemu-mips-static", binary, str(PORT)], preexec_fn=pre,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
         try:
@@ -130,6 +145,23 @@ try:
         print("FAIL  with SIGCHLD ignored by the launcher: got up %s, services %s after %.1f s; want 1, 2"
               % (got[0], got[1], took))
         fail = 1
+
+    if NOCLOCK:
+        d.kill()
+        d.wait()
+        d = start(binary=NOCLOCK)
+        for what, srvflow, up, services in NOCLOCK_CASES:
+            stub(srvflow)
+            t0 = time.monotonic()
+            body = scrape()
+            took = time.monotonic() - t0
+            got = (sample(body, "gpon_omci_up"), sample(body, "gpon_omci_services"))
+            if got == (up, services) and took < 6:
+                print("ok    %s: up %s, services %s (%.1f s)" % (what, up, services, took))
+            else:
+                print("FAIL  %s: got up %s, services %s after %.1f s; want %s, %s"
+                      % (what, got[0], got[1], took, up, services))
+                fail = 1
 finally:
     if d:
         d.kill()

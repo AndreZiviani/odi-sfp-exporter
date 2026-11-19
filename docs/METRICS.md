@@ -115,14 +115,14 @@ This does not change the metric type. `counter` is right precisely because
 Prometheus detects a counter reset and handles it; the cost is one interval's
 `rate()` every 15 minutes, on the host-side port. The exporter's running total
 (above) adds only what the register holds after the reset, so it does not
-jump at each boundary. Up to v1.11.0 a fall from a reading of 2^31 up to
-2^32 was taken for a 32-bit wrap and counted 2^32 minus that reading too much, up to 2^31
-bytes: readings of 1000, 3000000000 and 1000 exported 4294968296, not
-3000001000. Against an odi-oss build before v1.0.0, whose kernel read these
-registers 32 bits wide, a wrap between two scrapes that shows as a fall is
-now a reset, and the total misses 2^32 minus the last reading at each one; a
-wrap that ends above the last reading (100, then 200) is not seen at all and
-misses 2^32.
+jump at each boundary. Up to v1.11.0 a fall from a reading of at least 2^31 and
+below 2^32 was taken for a 32-bit wrap and counted 2^32 minus that reading too
+much, up to 2^31 bytes: readings of 1000, 3000000000 and 1000 exported
+4294968296, not 3000001000. Against a driver that reports only the low 32 bits
+of these registers, as an odi-oss build before v1.0.0 did on one stick, a wrap
+between two scrapes that shows as a fall is now a reset, and the total misses
+2^32 minus the last reading at each one; a wrap that ends above the last
+reading (100, then 200) is not seen at all and misses 2^32.
 **Port 2 — the PON side, the
 one that answers "is it forwarding" — is unaffected.** Reading remains
 non-destructive either way; the resets come from PM collection, not from

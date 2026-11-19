@@ -13,8 +13,8 @@
  * `diag mib reset counter` or a driver reload. extend_octets() below keeps a
  * running total per port that counts on from where the register fell, so
  * the exported counter only grows. See docs/DESIGN.md and docs/METRICS.md.
- * odi-oss builds before v1.0.0 read them 32 bits wide; against one of those
- * this undercounts (extend_octets()).
+ * An odi-oss build before v1.0.0 reported only their low 32 bits; against a
+ * driver like that this undercounts (extend_octets()).
  */
 
 #ifndef ODI_WRAP_H
@@ -112,12 +112,12 @@ static int port_index(const char *port, unsigned long plen)
  * from 6000000000 adds the same. Taking a fall from the upper half of 32 bits
  * for a 32-bit wrap counted 2^32 - last too much, up to 2^31 bytes, at each
  * such reset (1000, 3000000000, 1000 exported 4294968296, not 3000001000).
- * The other side of that: a kernel that reports these registers 32 bits
- * wide, as odi-oss builds before v1.0.0 did, has a wrap between two scrapes
- * that shows as a fall counted as a reset, and the total misses 2^32 - last
- * at each one; a wrap that ends above the last reading (100, then 200) is
- * not seen at all and misses 2^32. No release reads them so: odi-oss
- * odi_switch_mib.c reads them wide (ODI_SW_MIB_WIDE) since v1.0.0.
+ * The other side of that: a driver that reports only the low 32 bits of these
+ * registers, as an odi-oss build before v1.0.0 did, has a wrap between two
+ * scrapes that shows as a fall counted as a reset, and the total misses
+ * 2^32 - last at each one; a wrap that ends above the last reading (100,
+ * then 200) is not seen at all and misses 2^32. No release reads them so:
+ * odi-oss odi_switch_mib.c reads them wide (ODI_SW_MIB_WIDE) since v1.0.0.
  */
 static unsigned long long extend_octets(struct octet_state *st, unsigned long long raw)
 {

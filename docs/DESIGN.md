@@ -109,10 +109,16 @@ available:
    the register (2^31 or more) is treated as exactly one 32-bit wraparound,
    and from the lower half as a counter reset, since it cannot have wrapped:
    port 0 is cleared every 15 minutes and a wrap there added a phantom
-   3.8 GB each time. This rides on the diag invocation the scrape is
-   already paying for — no new fork, no new failure domain — and degrades
-   to option 1's behaviour for free once the underlying register really is
-   64-bit, since the value then never goes backwards.
+   3.8 GB each time. A register that has read 2^32 or more is wider than
+   32 bits, and every later fall on it is a reset too. This rides on the
+   diag invocation the scrape is already paying for — no new fork, no new
+   failure domain — and passes a register that really is 64-bit through
+   unchanged until its first reset. From then on the total counts on from
+   where the register fell (6000000000 then 1000 is 6000001000), where
+   option 1 would export the 1000: a counter either way, so `rate()` over
+   that reset reads the same. Not over a restart of the exporter: it starts
+   again from the raw reading, which drops the offset it had added, and
+   Prometheus sees a reset where the register had none.
 3. **Poll the counters from a background loop independent of scrapes**, so a
    wrap between two Prometheus scrapes is caught even if it happens more
    than once per interval. Rejected for this binary: it is single-threaded

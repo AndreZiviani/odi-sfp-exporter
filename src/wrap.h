@@ -9,8 +9,10 @@
  * consecutive 32-bit words (odi-oss's kernel driver, odi_switch_mib.c,
  * ODI_SW_MIB_WIDE) and diag composes and prints the full 64-bit decimal. That
  * makes extending it here look redundant, and on a stick running the fixed
- * driver it is -- see extend_octets() below, which is then a no-op. It is not
- * free insurance to skip: rc35 prefers /etc/config/metricsd over the image's
+ * driver it passes the raw value through -- until the register's first reset
+ * (port 0's comes at every PM boundary), after which it counts on from where
+ * the register fell (extend_octets() below). It is not free insurance to
+ * skip: rc35 prefers /etc/config/metricsd over the image's
  * own /bin/metricsd, but nothing ties that override to a matching kernel, so
  * an exporter can end up paired with an older driver that reports these as
  * plain 32-bit registers wrapping at 4.29 GB. A busy PON port can cross that
@@ -86,6 +88,7 @@ struct octet_state {
 	unsigned long long last_raw;
 	unsigned long long extended;
 	int seen;
+	int wide;	/* a reading of 2^32 or more came: the register is 64-bit */
 };
 
 /*
@@ -117,17 +120,24 @@ static int port_index(const char *port, unsigned long plen)
  * Extend one raw reading against the running per-port total.
  *
  * A value that grew since the last scrape is a plain delta -- the case that
- * always applies once the underlying register is genuinely 64-bit, since it
- * then never appears to shrink. A value that went backwards from the upper
- * half of the register is treated as exactly one 32-bit wraparound of the low
+ * applies to a genuinely 64-bit register between its resets, since it then
+ * shrinks only when it is cleared. A value that went backwards from the upper
+ * half of a 32-bit register is treated as exactly one wraparound of the low
  * word; see the file comment for the bound this does not cover (more than one
- * wrap between two scrapes). A value that went backwards from the lower half
- * is a reset: the counter restarted, so what it holds now is the traffic since
+ * wrap between two scrapes). Any other value that went backwards is a reset:
+ * the counter restarted, so what it holds now is the traffic since
  * (extended += raw), the same thing Prometheus does with a reset.
  *
- * What stays ambiguous: a reset from a reading >= 2^31 looks exactly like a
- * wrap, and still adds 2^32 - last + raw, at most 2^31 + raw -- half the old
- * error, and only on a port busy enough to hold 2 GB between two resets.
+ * A register that has ever read 2^32 or more is wider than 32 bits, and a
+ * wider register does not wrap in practice: from then on every decrease is a
+ * reset. Without that, a reset from 6000000000 to 1000 (port 0 at a PM
+ * boundary after a 4.29 GB interval) took the wrap branch, whose term then
+ * underflows, and the total went backwards by 1.7 GB.
+ *
+ * What stays ambiguous: on a register that has not read 2^32 yet, a reset
+ * from a reading >= 2^31 looks exactly like a wrap, and still adds
+ * 2^32 - last + raw, at most 2^31 + raw -- half the old error, and only on a
+ * port busy enough to hold 2 GB between two resets.
  */
 static unsigned long long extend_octets(struct octet_state *st, unsigned long long raw)
 {
@@ -136,11 +146,13 @@ static unsigned long long extend_octets(struct octet_state *st, unsigned long lo
 		st->extended = raw;
 	} else if (raw >= st->last_raw) {
 		st->extended += raw - st->last_raw;
-	} else if (st->last_raw >= WRAP_MIN_LAST) {
+	} else if (!st->wide && st->last_raw >= WRAP_MIN_LAST) {
 		st->extended += (raw + (1ULL << 32)) - st->last_raw;
 	} else {
 		st->extended += raw;
 	}
+	if (raw >> 32)
+		st->wide = 1;
 	st->last_raw = raw;
 	return st->extended;
 }

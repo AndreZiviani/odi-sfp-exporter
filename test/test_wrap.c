@@ -142,6 +142,62 @@ static void test_reset_is_not_a_wrap(void)
 	      "wrap then reset: got %llu", st.extended);
 }
 
+/*
+ * A reset on a 64-bit register. The stock firmware prints these wide, and
+ * omci_app clears port 0 at every PM boundary: after an interval of more than
+ * 4.29 GB the reading falls from 2^32 or more. That is never a 32-bit wrap,
+ * and taking it for one underflowed the wrap term: 6000000000 -> 1000 gave
+ * 4294968296, a total that went backwards.
+ */
+static void test_wide_reset(void)
+{
+	struct octet_state st;
+
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 6000000000ULL);
+	CHECK(extend_octets(&st, 1000ULL) == 6000000000ULL + 1000ULL,
+	      "reset from 6e9: got %llu want %llu", st.extended,
+	      6000000000ULL + 1000ULL);
+
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 40000000000ULL);
+	CHECK(extend_octets(&st, 27505987ULL) == 40000000000ULL + 27505987ULL,
+	      "reset from 40e9: got %llu", st.extended);
+
+	/* Once wide, always wide: a later reset from the 2^31..2^32 band is a
+	 * reset too, not the ambiguous wrap. */
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 5000000000ULL);
+	extend_octets(&st, 10ULL);			/* reset */
+	extend_octets(&st, 3000000000ULL);
+	CHECK(extend_octets(&st, 20ULL) == 5000000000ULL + 3000000000ULL + 20ULL,
+	      "second reset from 3e9 on a wide register: got %llu", st.extended);
+
+	/* A register that has not read 2^32 yet keeps the wrap. */
+	memset(&st, 0, sizeof(st));
+	extend_octets(&st, 4294967000ULL);
+	CHECK(extend_octets(&st, 10ULL) == 4294967296ULL + 10ULL,
+	      "a 32-bit wrap still extends: got %llu", st.extended);
+
+	/* The total never goes backwards, whatever the readings do. */
+	{
+		unsigned long long raws[] = {
+			0, 4294967295ULL, 5ULL, 4294967296ULL, 7ULL,
+			9000000000ULL, 0, 3000000000ULL, 1ULL, 2147483648ULL, 2ULL
+		};
+		unsigned long long prev = 0;
+		unsigned long i;
+
+		memset(&st, 0, sizeof(st));
+		for (i = 0; i < sizeof(raws) / sizeof(raws[0]); i++) {
+			unsigned long long got = extend_octets(&st, raws[i]);
+
+			CHECK(got >= prev, "step %lu: %llu after %llu", i, got, prev);
+			prev = got;
+		}
+	}
+}
+
 /* Two ports must not share state. */
 static void test_per_port_independence(void)
 {
@@ -183,6 +239,7 @@ int main(void)
 	test_no_wrap_passthrough();
 	test_single_wrap();
 	test_reset_is_not_a_wrap();
+	test_wide_reset();
 	test_per_port_independence();
 	test_port_index();
 

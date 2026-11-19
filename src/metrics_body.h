@@ -594,9 +594,10 @@ next:
  *     registers that DO wrap, at 4.29 GB. So the exporter tracks the last raw
  *     reading per port and extends it into a monotonic 64-bit total itself
  *     (wrap.h, extend_octets()) rather than trusting the field width. On a
- *     stick with the fixed driver this is a no-op: the reading never goes
- *     backwards, so the "extend" path never fires and the total tracks the
- *     raw value exactly. See docs/DESIGN.md.
+ *     stick with the fixed driver the total is the raw value until the
+ *     register's first reset (port 0's comes every 15 minutes, at the PM
+ *     boundary); from then on it counts on from where the register fell,
+ *     and is no longer the raw value. See docs/DESIGN.md.
  *
  * Both properties together mean these are real Prometheus counters. Every
  * other family below is passed straight through as the digits diag printed,

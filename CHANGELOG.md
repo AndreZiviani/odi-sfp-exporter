@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `gpon_port_{receive,transmit}_octets_total` no longer go backwards when a
+  64-bit octet register is reset from 2^32 or more. The fall took the
+  32-bit wrap branch, whose term then underflowed: 6000000000 to 1000 was
+  exported as 4294968296, and Prometheus counted the whole new total as
+  growth. The stock firmware prints these registers wide and clears port 0
+  at every PM boundary, so one interval of more than 4.29 GB was enough. A
+  register that has read 2^32 or more is now taken as wide, and every
+  later fall on it as a reset. METRICS.md and the source no longer say a
+  64-bit register is passed through unchanged: it is until its first
+  reset.
+
 ## v1.11.0 (2026-11-16)
 
 - A client that connects and sends nothing no longer holds every scrape

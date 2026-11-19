@@ -92,7 +92,9 @@ these as plain 32-bit registers, wrapping at 4.29 GB — which is what a live
 read on one stick showed. So the exporter no longer trusts the field width:
 it tracks the last raw reading per port and extends it into a monotonic
 64-bit total itself (`src/wrap.h`; see docs/DESIGN.md). On a stick with the
-fixed driver this is a no-op, since the reading then never goes backwards.
+fixed driver the total is the raw reading until the register's first reset
+(port 0's at the first PM boundary, every 15 minutes); from then on it counts
+on from where the register fell, so it is no longer the raw value.
 
 What this does **not** cover: two wraps between two scrapes, i.e. more than
 4.29 GB of traffic inside one scrape interval — at the default 60 s interval,
@@ -122,9 +124,13 @@ Prometheus detects a counter reset and handles it; the cost is one interval's
 `rate()` every 15 minutes, on the host-side port. The exporter's own 64-bit
 extension (above) must not turn the reset into a wrap: a reading that falls
 from below 2^31 is a reset and adds only what it holds now, so the total no
-longer jumps by about 3.8 GB at each boundary. A reset from 2^31 or more is
-indistinguishable from a wrap by value alone and still adds up to
-2^31 + the new reading. **Port 2 — the PON side, the
+longer jumps by about 3.8 GB at each boundary. So is a fall on a register that
+has read 2^32 or more since the exporter started: it is wider than 32 bits and
+cannot have wrapped (the stock firmware prints these wide, so port 0 falls
+from past 2^32 after an interval of more than 4.29 GB). Only on a register
+that has not read 2^32 yet is a reset from 2^31 or more indistinguishable
+from a wrap by value alone; it still adds up to 2^31 + the new reading.
+**Port 2 — the PON side, the
 one that answers "is it forwarding" — is unaffected.** Reading remains
 non-destructive either way; the resets come from PM collection, not from
 scraping.

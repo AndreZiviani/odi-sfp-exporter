@@ -51,7 +51,7 @@ other repo, not here.
     test/test_image_info.c host-native unit test for src/image_info.h (`make test`)
     test/test_olt_info.c  host-native test for src/olt_info.h against test/fixtures/olt-g-*, with goldens (`make test`)
     test/test_metrics.sh  fixture check on the mib_* tables in metrics_body.h
-    test/test_silent_client.py  the accept loop under qemu-user with a silent client (`make silent-client-test`)
+    test/test_silent_client.py  the accept loop under qemu-user: a silent client, long requests read late (`make silent-client-test`)
     test/test_provision.c host-native test for src/provision.h against test/fixtures, with goldens
     test/test_gpon_link.c host-native test for src/gpon_link.h against test/fixtures, with a golden; also the scrape with no /proc files
     test/test_gpon_flow.c host-native test for src/gpon_flow.h against test/fixtures, with a golden

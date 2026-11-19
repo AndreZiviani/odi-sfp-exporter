@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- A scrape whose request is longer than 511 bytes, or arrives in two
+  segments, no longer ends in "connection reset by peer". metricsd read the
+  request once and closed with the rest unread, so Linux sent an RST
+  instead of a FIN and dropped what was still queued for the client:
+  Prometheus counted a failed scrape, curl exited with 56. Extra headers
+  (basic auth, a proxy, a browser with the confd session cookie) were
+  enough. metricsd now closes in stages after the response: it sends its
+  FIN with `shutdown()`, then reads and drops what the client still sends
+  until the client closes or stays silent for 500 ms, for at most 2 s in
+  all: a request that has arrived by then is read whole, however long
+  (without a working clock, the 2 s are a budget of waits). `make
+  silent-client-test` sends requests of 634, 16,034 and 72,034 bytes,
+  reads the answer late, and checks that it ends in its last sample.
+
 - `gpon_port_{receive,transmit}_octets_total` no longer go backwards when a
   64-bit octet register is reset from 2^32 or more. The fall took the
   32-bit wrap branch, whose term then underflowed: 6000000000 to 1000 was

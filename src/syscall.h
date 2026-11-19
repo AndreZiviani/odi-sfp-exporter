@@ -47,6 +47,8 @@ struct pollfd {
 #define __NR_listen     4174
 #define __NR_accept     4168
 #define __NR_setsockopt 4181
+#define __NR_shutdown   4182    /* 4000 + 182 in <asm/unistd_o32.h> */
+#define SHUT_WR         1
 
 /*
  * stat64, for the config-store metrics. The struct comes from the target own
@@ -186,6 +188,51 @@ __attribute__((unused)) static long mono_s(void)
 	if (syscall3(__NR_clock_gettime, CLOCK_MONOTONIC, (long)ts, 0) == 0)
 		return ts[0];
 	return -1;
+}
+
+/*
+ * Milliseconds on the same clock, into *out, for a deadline inside one
+ * scrape; 0 when the kernel offers neither call. The count wraps after 49
+ * days of uptime, so a deadline is only ever a difference, now - start,
+ * which stays right across the wrap.
+ */
+__attribute__((unused)) static int mono_ms(unsigned long *out)
+{
+	long ts[4];
+
+	if (syscall3(__NR_clock_gettime64, CLOCK_MONOTONIC, (long)ts, 0) == 0) {
+		*out = (unsigned long)ts[1] * 1000UL + (unsigned long)ts[3] / 1000000UL;
+		return 1;
+	}
+	if (syscall3(__NR_clock_gettime, CLOCK_MONOTONIC, (long)ts, 0) == 0) {
+		*out = (unsigned long)ts[0] * 1000UL + (unsigned long)ts[1] / 1000000UL;
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * What is left of a deadline total_ms from t0, for a wait of at most
+ * want_ms; 0 once it has passed. Measured with a clock. Without one,
+ * *budget is charged with every wait handed out, in full whether it was
+ * used or not: a bound that holds, if a stricter one than the clock's.
+ */
+__attribute__((unused))
+static long deadline_wait(int clock, unsigned long t0, long total_ms,
+			  long *budget, long want_ms)
+{
+	unsigned long now;
+	long left;
+
+	if (clock && mono_ms(&now)) {
+		left = total_ms - (long)(now - t0);
+		if (left > want_ms)
+			left = want_ms;
+	} else {
+		left = *budget < want_ms ? *budget : want_ms;
+		*budget -= left;
+	}
+	return left > 0 ? left : 0;
 }
 
 /* The descriptor whose last write failed, or -1. Every later write to it

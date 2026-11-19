@@ -161,7 +161,8 @@ run: image
 	@$(RUN) qemu-mips-static $(BIN) $(ARGS)
 
 # The accept loop under qemu-user: a client that connects and sends nothing
-# must not hold the scrapes behind it (test/test_silent_client.py).
+# must not hold the scrapes behind it, and a request longer than one read
+# must still end in a clean close (test/test_silent_client.py).
 silent-client-test: httpd
 	$(RUN) python3 test/test_silent_client.py $(BIN)
 

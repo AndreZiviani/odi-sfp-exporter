@@ -216,7 +216,7 @@ each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon/status`:
 
 | metric | source |
 |---|---|
-| `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time; 0 is a stuck omcid, and the families below are then stale or absent |
+| `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time with a service table; 0 is an omcid that did not answer: none in time, omcicli printed only its own error (no command queue, send failed on a full one), or it said the dump may be incomplete, rows before that line or not. An omcicli that hangs after its answer is 0 as well. `gpon_omci_services` and what `omcicli provision` gives are then absent, and `gpon_olt_info` is not read again; the T-CONTs from `/proc` still come, and an OLT-G read earlier while its cache is valid (until the ONU state moves, an hour at most). Absent when omcicli printed nothing at all, as on an image without it |
 | `gpon_omci_services` | `omcicli dump srvflow` -- bridge connections installed; 0 at O5 is synced but not provisioned |
 | `gpon_provision_tconts` | `/proc/odi_gpon/status`, `alloc_ids` -- T-CONTs the OLT assigned by PLOAM (Assign_Alloc-ID) |
 | `gpon_provision_tcont_info{alloc_id}` | same, 1 per Alloc-ID |

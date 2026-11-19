@@ -491,6 +491,112 @@ static long run_to_buf(const char *path, char *const argv[],
 	return timed_out ? -2 : got;	/* -2: distinguishable from "ran, said nothing" */
 }
 
+/* Without a clock, the waits run_to_feed hands out: a deadline counted in
+ * charged waits needs them short, or one read would take the whole of it. */
+#define FEED_SLICE_MS 100
+/* What one wake reads of output that is already there, before the deadline
+ * is looked at again. */
+#define FEED_ROUND_MAX 65536
+
+#define WNOHANG 1
+#define ECHILD  10
+
+/*
+ * Run a command and hand its output to feed() as it comes, for an answer
+ * that is read line by line and not worth a buffer of its own: the vendor
+ * `omcicli dump srvflow` prints 256 rows, about 18 KB, and the one row in
+ * use can be the last.
+ *
+ * One deadline, timeout_ms from the start, bounds the whole run: every read,
+ * and the exit once the child has closed its output, which run_to_buf
+ * waits for without a bound. Past it the child is killed and the answer is
+ * -2, as from run_to_buf. Otherwise the bytes read, 0 for a child that
+ * printed nothing (an exec that failed among them), or -1 when nothing
+ * could be started. Without a clock the deadline is a budget of waits of
+ * FEED_SLICE_MS, each charged in full, and each wake reads what is already
+ * there: still finite, if shorter for a child that writes in many pauses.
+ */
+__attribute__((unused))
+static long run_to_feed(const char *path, char *const argv[], int timeout_ms,
+			void (*feed)(void *ctx, const char *p, unsigned long n),
+			void *ctx)
+{
+	char chunk[512];
+	int fds[2];
+	long pid, status = 0, got = 0, budget = timeout_ms, wait;
+	unsigned long t0 = 0;
+	int clock = mono_ms(&t0), eof = 0;
+
+	if (syscall3(__NR_pipe2, (long)fds, 0, 0) < 0)
+		return -1;
+	pid = syscall3(__NR_fork, 0, 0, 0);
+	if (pid < 0) {
+		syscall3(__NR_close, fds[0], 0, 0);
+		syscall3(__NR_close, fds[1], 0, 0);
+		return -1;
+	}
+	if (pid == 0) {
+		syscall3(__NR_close, fds[0], 0, 0);
+		syscall3(__NR_dup2, fds[1], 1, 0);	/* stdout */
+		syscall3(__NR_dup2, fds[1], 2, 0);	/* stderr, same place */
+		if (fds[1] > 2)
+			syscall3(__NR_close, fds[1], 0, 0);
+		close_inherited();
+		syscall3(__NR_execve, (long)path, (long)argv, 0);
+		syscall3(__NR_exit, 127, 0, 0);	/* exec failed */
+	}
+	syscall3(__NR_close, fds[1], 0, 0);
+
+	while (!eof) {
+		struct pollfd pfd;
+		unsigned long round = 0;
+
+		pfd.fd = fds[0];
+		pfd.events = POLLIN;
+		pfd.revents = 0;
+		wait = deadline_wait(clock, t0, timeout_ms, &budget,
+				     clock ? timeout_ms : FEED_SLICE_MS);
+		if (!wait || syscall3(__NR_poll, (long)&pfd, 1, wait) <= 0) {
+			syscall3(__NR_close, fds[0], 0, 0);
+			kill_and_reap(pid);
+			return -2;
+		}
+		/* This read, and whatever else is there already. */
+		do {
+			long n = syscall3(__NR_read, fds[0], (long)chunk, sizeof(chunk));
+
+			if (n <= 0) {
+				eof = 1;	/* the child is done writing */
+				break;
+			}
+			feed(ctx, chunk, (unsigned long)n);
+			got += n;
+			round += (unsigned long)n;
+			pfd.revents = 0;
+		} while (round < FEED_ROUND_MAX &&
+			 syscall3(__NR_poll, (long)&pfd, 1, 0) > 0);
+	}
+	syscall3(__NR_close, fds[0], 0, 0);
+
+	/* Its exit follows at once, unless the child closed its output and
+	 * went on waiting: looked for every 20 ms in what is left of the
+	 * deadline, then killed like a silent child. ECHILD is a child the
+	 * kernel reaped already, for a parent that ignores SIGCHLD: it has
+	 * exited, and its pid is no longer ours to signal. */
+	for (;;) {
+		long r = syscall3(__NR_waitpid, pid, (long)&status, WNOHANG);
+
+		if (r == pid || r == -ECHILD)
+			return got;
+		wait = deadline_wait(clock, t0, timeout_ms, &budget, 20);
+		if (!wait)
+			break;
+		syscall3(__NR_poll, 0, 0, wait);
+	}
+	kill_and_reap(pid);
+	return -2;
+}
+
 /*
  * Run one program and feed it a script on stdin, collecting stdout+stderr.
  *

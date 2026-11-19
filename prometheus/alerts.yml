@@ -84,11 +84,16 @@ groups:
         annotations:
           summary: "{{ $labels.instance }}: OMCI daemon not answering"
           description: >-
-            omcicli got no answer from the OMCI daemon within 2 s for 5
-            minutes. Service may still be forwarding, but the ONU cannot
-            follow OLT changes, and on odi-oss the watchdog resets a stuck
-            omcid within its 60 s deadline -- so this lasting means the
-            daemon answers the watchdog and not the command queue.
+            omcicli got no answer from the OMCI daemon for 5 minutes: none
+            within 2 s, no command queue to send to, a send to a full one
+            failed, or omcicli said the dump may be incomplete. An omcicli
+            that hangs after a complete answer looks the same. Service may
+            still be forwarding, but the ONU cannot follow OLT changes.
+            Things to check: whether omcid runs; whether its command queue
+            (key 0x800) exists, since no queue means no daemon made one;
+            whether that queue drains, since a full one is one nobody reads;
+            and what the odi-oss watchdog last did, which resets an omcid
+            that misses its 60 s deadline.
 
   - name: odi-gpon
     rules:

@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- `gpon_omci_up` is 0 when omcicli prints only its own error, not 1. Any
+  text counted as an answer, so `% no command queue at key 0x800` (omcid
+  not started) and `% send failed` (a queue nobody reads, full after
+  about 8 minutes of scrapes) both gave `gpon_omci_up 1` and
+  `gpon_omci_services 0`: OdiOmciDown never fired or cleared by itself,
+  and OdiOmciNoServices sent the operator to check the serial number. An
+  answer now has a `SERVID` row with its `Used` value (the vendor
+  omci_app) or the count line odi-oss omcid ends with (`0 services`),
+  whose number is then the count; the reading is `src/srvflow.h`, tested
+  by `test/test_srvflow.c`. A text in which omcicli says the dump may be
+  incomplete (no answer to its barrier, the daemon stopped mid-stream) is
+  no answer either, rows before that line or not: a count from them could
+  miss the row in use. The provisioning and OLT-G reads are skipped after
+  such an error, as after a timeout. The OdiOmciDown description lists
+  what to check instead of saying which of them it is.
+
+- `gpon_omci_services` counts a service in any row of the vendor dump.
+  metricsd kept the first 8 KB of `omcicli dump srvflow`, fewer than half
+  of the 256 rows the vendor omci_app prints, so a service in a later row
+  was not counted and OdiOmciNoServices could fire on a provisioned ONU.
+  The dump is now counted as it is read, to its end. One 2 s deadline
+  covers the whole omcicli run, its exit included: an omcicli that closed
+  its output and did not exit held the scrape until it did, and is now
+  killed and counted as no answer. A child the kernel reaped on its own,
+  under a launcher that ignores SIGCHLD, counts as exited. Without a
+  working clock the deadline is a budget of short waits, so it still ends.
+  `make omcicli-test` runs metricsd against stand-ins for `/bin/omcicli`,
+  and once more with SIGCHLD ignored.
+
 - A scrape whose request is longer than 511 bytes, or arrives in two
   segments, no longer ends in "connection reset by peer". metricsd read the
   request once and closed with the rest unread, so Linux sent an RST

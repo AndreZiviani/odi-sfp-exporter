@@ -36,10 +36,13 @@
   killed and counted as no answer. A child the kernel reaped on its own,
   under a launcher that ignores SIGCHLD, counts as exited. Without a
   working clock the deadline is a budget of 100 ms waits, so it still ends,
-  and a wait that ends quiet goes on to the next. `make omcicli-test` runs
+  and a wait that ends quiet goes on to the next; with a clock such a wait
+  was the rest of the deadline and ends the run. `make omcicli-test` runs
   metricsd against stand-ins for `/bin/omcicli`, once more with SIGCHLD
   ignored, and from a build without a clock (`build/metricsd-noclock`,
-  never shipped) against an answer with pauses in it.
+  never shipped) against an answer with pauses in it. It checks that a
+  silent child is waited out for the whole 2 s, and that the build without
+  a clock has none.
 
 - A scrape whose request is longer than 511 bytes, or arrives in two
   segments, no longer ends in "connection reset by peer". metricsd read the

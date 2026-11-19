@@ -179,9 +179,9 @@ silent-client-test: httpd
 # What a scrape reports for each way omcicli can answer, under qemu-user
 # with a stand-in /bin/omcicli inside the container (test/test_omcicli.py):
 # the vendor dump with its one service in row 200, odi-oss omcid, omcicli's
-# own error, nothing at all, and a child that does not finish in 2 s; then
-# an answer with pauses in it and a silent child again, from a build
-# without a clock.
+# own error, nothing at all, a child that does not finish in 2 s and one
+# that keeps writing; then an answer with pauses in it, a silent child and
+# the one that keeps writing again, from a build without a clock.
 omcicli-test: httpd
 	$(RUN) make IN_CONTAINER=1 BUILD_ID='$(BUILD_ID)' $(BUILD)/metricsd-noclock
 	$(RUN) python3 test/test_omcicli.py $(BIN) $(BUILD)/metricsd-noclock

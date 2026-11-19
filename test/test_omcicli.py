@@ -30,9 +30,18 @@ odi_two = ("SERVID 0: Used: 1, (DIR=1, USFID=0, DSFID=1, SERVID=0, UNIMASK=1)\n"
            "2 services\n")
 
 half = vendor.index("SERVID 128:")
+# The vendor dump with a row in use on each side of row 128, where the
+# pause below falls: only a run that reads past the pause counts both.
+vendor2 = "".join("SERVID %d: Used: %d, (DIR=0, USFID=0, DSFID=0, SERVID=0, UNIMASK=0)\n"
+                  % (i, i in (50, 200)) for i in range(256))
+# A child that never stops and never falls quiet: a row every 50 ms.
+TRICKLE = ("while :; do echo 'SERVID 0: Used: 0, (DIR=0, USFID=0, DSFID=0, SERVID=0, UNIMASK=0)'; "
+           "sleep 0.05; done")
 
 # (what, the shell for `dump srvflow`, gpon_omci_up, gpon_omci_services)
-# None means the line is absent.
+# None means the line is absent. A run that has to wait out the 2 s bound
+# is also checked to have waited it out (SLOW, at least 1.8 s), not ended
+# early.
 CASES = [
     ("the vendor dump, 18 KB, with the only row in use at 200",
      "cat <<'X'\n" + vendor + "X\n", "1", "1"),
@@ -55,10 +64,18 @@ NOCLOCK_CASES = [
     ("no clock: an answer after half a second of quiet",
      "sleep 0.5\ncat <<'X'\n" + odi_two + "X\n", "1", "2"),
     ("no clock: the vendor dump with a pause in the middle",
-     "cat <<'X'\n" + vendor[:half] + "X\nsleep 0.3\ncat <<'X'\n" + vendor[half:] + "X\n",
-     "1", "1"),
+     "cat <<'X'\n" + vendor2[:half] + "X\nsleep 0.3\ncat <<'X'\n" + vendor2[half:] + "X\n",
+     "1", "2"),
     ("no clock: no answer within the bound", "exec sleep 10", "0", None),
 ]
+
+
+SLOW = ("no answer within the bound", "an answer, then the output closed and no exit",
+        "no clock: no answer within the bound")
+
+
+def timed_ok(what, took):
+    return took < 6 and (what not in SLOW or took >= 1.8)
 
 
 def scrape():
@@ -121,12 +138,27 @@ try:
         got = (sample(body, "gpon_omci_up"), sample(body, "gpon_omci_services"))
         # The bound is 2 s for omcicli; qemu and the rest of the scrape add
         # some, a wait for the child's exit would add 8 more.
-        if got == (up, services) and took < 6:
+        if got == (up, services) and timed_ok(what, took):
             print("ok    %s: up %s, services %s (%.1f s)" % (what, up, services, took))
         else:
             print("FAIL  %s: got up %s, services %s after %.1f s; want %s, %s"
                   % (what, got[0], got[1], took, up, services))
             fail = 1
+
+    # A child that keeps writing is cut off at the 2 s of the clock. The
+    # build without one charges every wake a full 100 ms slice, and a row
+    # every 50 ms ends its budget in about 1 s: the check below that it
+    # has no clock.
+    stub(TRICKLE)
+    t0 = time.monotonic()
+    body = scrape()
+    took = time.monotonic() - t0
+    if sample(body, "gpon_omci_up") == "0" and 1.8 <= took < 6:
+        print("ok    a child that keeps writing is cut off at the bound (%.1f s)" % took)
+    else:
+        print("FAIL  a child that keeps writing: up %s after %.1f s; want 0 after 2 s"
+              % (sample(body, "gpon_omci_up"), took))
+        fail = 1
 
     # The same answer from a metricsd whose children the kernel reaps: it
     # has exited, and the answer stands. It was taken for a child that would
@@ -156,12 +188,22 @@ try:
             body = scrape()
             took = time.monotonic() - t0
             got = (sample(body, "gpon_omci_up"), sample(body, "gpon_omci_services"))
-            if got == (up, services) and took < 6:
+            if got == (up, services) and timed_ok(what, took):
                 print("ok    %s: up %s, services %s (%.1f s)" % (what, up, services, took))
             else:
                 print("FAIL  %s: got up %s, services %s after %.1f s; want %s, %s"
                       % (what, got[0], got[1], took, up, services))
                 fail = 1
+        stub(TRICKLE)
+        t0 = time.monotonic()
+        body = scrape()
+        took = time.monotonic() - t0
+        if sample(body, "gpon_omci_up") == "0" and took < 1.6:
+            print("ok    no clock: a child that keeps writing ends the budget early, so this build has none (%.1f s)" % took)
+        else:
+            print("FAIL  no clock: a child that keeps writing: up %s after %.1f s; want 0 well before 2 s"
+                  % (sample(body, "gpon_omci_up"), took))
+            fail = 1
 finally:
     if d:
         d.kill()

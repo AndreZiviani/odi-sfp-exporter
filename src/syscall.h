@@ -565,14 +565,17 @@ static long run_to_feed(const char *path, char *const argv[], int timeout_ms,
 		wait = deadline_wait(clock, t0, timeout_ms, &budget,
 				     clock ? timeout_ms : FEED_SLICE_MS);
 		ready = wait ? syscall3(__NR_poll, (long)&pfd, 1, wait) : 0;
-		if (!wait || ready < 0) {
+		/* With a clock, a wait that ended quiet was the rest of the
+		 * deadline, and the run ends here: the next turn would ask the
+		 * clock again, and a clock that failed then would hand out the
+		 * whole budget a second time. */
+		if (!wait || ready < 0 || (!ready && clock)) {
 			syscall3(__NR_close, fds[0], 0, 0);
 			kill_and_reap(pid);
 			return -2;
 		}
-		/* A wait that ended quiet: the deadline decides, on the next
-		 * turn. Without a clock that wait was one slice of the budget,
-		 * not the end of it. */
+		/* Without a clock that wait was one slice of the budget, not
+		 * the end of it: the next turn takes the next one. */
 		if (!ready)
 			continue;
 		/* This read, and whatever else is there already. */

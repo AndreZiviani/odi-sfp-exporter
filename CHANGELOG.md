@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Build: `make httpd` rebuilds `build/metricsd` after an edit to any
+  header in `src/`, and after one is added or removed. Seven headers were
+  missing from the Makefile's list, so once the tree was dirty an edit to
+  one of them left the binary from before it in place. `make verify`,
+  `make deploy` and the other targets that take `BIN` use the binary as
+  it is.
+
 - `gpon_omci_up` is 0 when omcicli prints only its own error, not 1. Any
   text counted as an answer, so `% no command queue at key 0x800` (omcid
   not started) and `% send failed` (a queue nobody reads, full after

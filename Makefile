@@ -57,7 +57,7 @@ endif
 
 LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
 
-HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/slot_state.h src/host_link.h src/respawn_state.h src/cpu_stat.h src/provision.h src/srvflow.h
+HDRS := $(wildcard src/*.h)
 
 # BUILD_ID is compiled in, but it is a make VARIABLE -- make cannot see it
 # change, so with the sources untouched it will not rebuild and the binary keeps
@@ -77,7 +77,10 @@ HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/sl
 $(BUILD)/.build-id: FORCE | $(BUILD)
 	@printf '%s' '$(BUILD_ID)' | cmp -s - $@ 2>/dev/null || printf '%s' '$(BUILD_ID)' > $@
 
-$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) $(BUILD)/.build-id | $(BUILD)
+# src itself as well: a header deleted from it is no longer in HDRS, and
+# without the directory's mtime nothing would be newer than the binary, so
+# the include that still names it would not fail until the next clean build.
+$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id | $(BUILD)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter %.S %.c,$^)
 	$(STRIP) $@
 

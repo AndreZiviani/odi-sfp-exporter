@@ -112,8 +112,10 @@ registers, as odi-oss builds before v1.0.0 did (a live read on one stick
 showed it). No odi-oss release does, and the guess counted 2^32 minus the
 reading it fell from too much, up to 2^31 bytes, at a reset: 1000,
 3000000000 and 1000 exported 4294968296, not 3000001000. Against such a
-pre-release kernel the exporter now undercounts instead: a 32-bit wrap is
-a reset to it, and the total misses 2^32 minus the last reading.
+pre-release kernel the exporter now undercounts instead: a 32-bit wrap
+that shows as a fall is a reset to it, and the total misses 2^32 minus the
+last reading; one that ends above the last reading (100, then 200) is not
+seen at all and misses 2^32.
 
 No other MIB counter gets this treatment. Every other family (packets,
 drops, errors, pause frames, the frame-size histogram added in v1.1.0) is a

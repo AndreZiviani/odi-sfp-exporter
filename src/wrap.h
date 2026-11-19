@@ -113,8 +113,11 @@ static int port_index(const char *port, unsigned long plen)
  * for a 32-bit wrap counted 2^32 - last too much, up to 2^31 bytes, at each
  * such reset (1000, 3000000000, 1000 exported 4294968296, not 3000001000).
  * The other side of that: a kernel that reports these registers 32 bits
- * wide, as odi-oss builds before v1.0.0 did, has each wrap counted as a
- * reset, and the total misses 2^32 - last at each one. No release has one.
+ * wide, as odi-oss builds before v1.0.0 did, has a wrap between two scrapes
+ * that shows as a fall counted as a reset, and the total misses 2^32 - last
+ * at each one; a wrap that ends above the last reading (100, then 200) is
+ * not seen at all and misses 2^32. No release reads them so: odi-oss
+ * odi_switch_mib.c reads them wide (ODI_SW_MIB_WIDE) since v1.0.0.
  */
 static unsigned long long extend_octets(struct octet_state *st, unsigned long long raw)
 {

@@ -1,6 +1,6 @@
 /*
- * Host-native test for src/wrap.h -- the octet-counter wraparound extension
- * and the digit parsing/formatting it depends on.
+ * Host-native test for src/wrap.h -- the octet-counter running total across
+ * register resets and the digit parsing/formatting it depends on.
  *
  * Deliberately built with the HOST compiler, not the MIPS cross toolchain:
  * wrap.h has no syscalls and no asm, so it compiles unchanged with plain gcc,
@@ -52,9 +52,9 @@ static void test_format_parse_roundtrip(void)
 	}
 }
 
-/* A device with the fixed 64-bit driver: the raw reading only ever grows, so
- * extend_octets() must track it exactly with no distortion. */
-static void test_no_wrap_passthrough(void)
+/* Between resets the raw reading only ever grows, so extend_octets() must
+ * track it exactly with no distortion. */
+static void test_no_reset_passthrough(void)
 {
 	struct octet_state st;
 	unsigned long long raws[] = { 0, 100, 4294967296ULL, 9000000000ULL };
@@ -65,44 +65,17 @@ static void test_no_wrap_passthrough(void)
 		unsigned long long got = extend_octets(&st, raws[i]);
 
 		CHECK(got == raws[i],
-		      "extend_octets no-wrap step %lu: got %llu want %llu",
+		      "extend_octets step %lu: got %llu want %llu",
 		      i, got, raws[i]);
 	}
 }
 
 /*
- * A device stuck on a plain 32-bit register: the fixture sequence a busy
- * port produces, crossing 2^32 between two scrapes.
+ * Every fall is a reset, never a 32-bit wrap: the registers are 64-bit.
+ * Port 0 is cleared every 15 minutes by omci_app: the observed pair is
+ * 487034420 -> 27505987 (docs/METRICS.md).
  */
-static void test_single_wrap(void)
-{
-	struct octet_state st;
-	unsigned long long expect;
-
-	memset(&st, 0, sizeof(st));
-
-	CHECK(extend_octets(&st, 4294967200ULL) == 4294967200ULL,
-	      "baseline scrape: got %llu", st.extended);
-
-	/* Register wrapped: 4294967200 -> ... -> 2^32 -> 100. */
-	expect = 4294967200ULL + ((100ULL + (1ULL << 32)) - 4294967200ULL);
-	CHECK(extend_octets(&st, 100ULL) == expect,
-	      "post-wrap scrape: got %llu want %llu", st.extended, expect);
-	CHECK(st.extended == 4294967296ULL + 100ULL,
-	      "post-wrap total should be one full 32-bit span past raw: got %llu",
-	      st.extended);
-
-	/* And it keeps counting normally afterwards. */
-	CHECK(extend_octets(&st, 5000ULL) == 4294967296ULL + 5000ULL,
-	      "scrape after the wrap: got %llu", st.extended);
-}
-
-/*
- * A counter reset is not a wrap. Port 0 is cleared every 15 minutes by
- * omci_app: the observed pair is 487034420 -> 27505987 (docs/METRICS.md), and
- * the old code added 2^32 + 27505987 - 487034420, about 3.8 GB, each time.
- */
-static void test_reset_is_not_a_wrap(void)
+static void test_fall_is_a_reset(void)
 {
 	struct octet_state st;
 	unsigned long long before = 487034420ULL, after = 27505987ULL;
@@ -110,8 +83,7 @@ static void test_reset_is_not_a_wrap(void)
 	memset(&st, 0, sizeof(st));
 	extend_octets(&st, before);
 	CHECK(extend_octets(&st, after) == before + after,
-	      "reset: got %llu want %llu (a phantom 2^32 step if larger)",
-	      st.extended, before + after);
+	      "reset: got %llu want %llu", st.extended, before + after);
 	CHECK(extend_octets(&st, after + 1000) == before + after + 1000,
 	      "after the reset it counts normally: got %llu", st.extended);
 
@@ -121,63 +93,35 @@ static void test_reset_is_not_a_wrap(void)
 	CHECK(extend_octets(&st, 0) == 123456789ULL,
 	      "reset to 0: got %llu", st.extended);
 
-	/* The edge: last = 2^31 - 1 cannot have wrapped, 2^31 can. */
+	/* From the upper half of 32 bits: 1000, 3e9, 1000 used to take the
+	 * wrap branch and export 4294968296. */
 	memset(&st, 0, sizeof(st));
-	extend_octets(&st, 2147483647ULL);
-	CHECK(extend_octets(&st, 5) == 2147483647ULL + 5,
-	      "reset just under 2^31: got %llu", st.extended);
+	extend_octets(&st, 1000ULL);
+	extend_octets(&st, 3000000000ULL);
+	CHECK(extend_octets(&st, 1000ULL) == 3000000000ULL + 1000ULL,
+	      "reset from 3e9: got %llu want %llu", st.extended,
+	      3000000000ULL + 1000ULL);
+
+	/* Just under 2^32, the reading a 32-bit wrap would come from. */
 	memset(&st, 0, sizeof(st));
-	extend_octets(&st, 2147483648ULL);
-	CHECK(extend_octets(&st, 5) == 4294967296ULL + 5,
-	      "wrap from exactly 2^31: got %llu", st.extended);
+	extend_octets(&st, 4294967200ULL);
+	CHECK(extend_octets(&st, 100ULL) == 4294967200ULL + 100ULL,
+	      "reset from just under 2^32: got %llu", st.extended);
 
-	/* A reset then a real wrap on the same port still extends: the two
-	 * cases must not poison each other's state. */
-	memset(&st, 0, sizeof(st));
-	extend_octets(&st, 4294967000ULL);
-	extend_octets(&st, 10ULL);			/* wrap */
-	extend_octets(&st, 700ULL);
-	extend_octets(&st, 50ULL);			/* reset */
-	CHECK(st.extended == 4294967296ULL + 10ULL + (700ULL - 10ULL) + 50ULL,
-	      "wrap then reset: got %llu", st.extended);
-}
-
-/*
- * A reset on a 64-bit register. The stock firmware prints these wide, and
- * omci_app clears port 0 at every PM boundary: after an interval of more than
- * 4.29 GB the reading falls from 2^32 or more. That is never a 32-bit wrap,
- * and taking it for one underflowed the wrap term: 6000000000 -> 1000 gave
- * 4294968296, a total that went backwards.
- */
-static void test_wide_reset(void)
-{
-	struct octet_state st;
-
+	/* From 2^32 or more. */
 	memset(&st, 0, sizeof(st));
 	extend_octets(&st, 6000000000ULL);
 	CHECK(extend_octets(&st, 1000ULL) == 6000000000ULL + 1000ULL,
 	      "reset from 6e9: got %llu want %llu", st.extended,
 	      6000000000ULL + 1000ULL);
 
-	memset(&st, 0, sizeof(st));
-	extend_octets(&st, 40000000000ULL);
-	CHECK(extend_octets(&st, 27505987ULL) == 40000000000ULL + 27505987ULL,
-	      "reset from 40e9: got %llu", st.extended);
-
-	/* Once wide, always wide: a later reset from the 2^31..2^32 band is a
-	 * reset too, not the ambiguous wrap. */
+	/* Two resets in a row on the same port. */
 	memset(&st, 0, sizeof(st));
 	extend_octets(&st, 5000000000ULL);
 	extend_octets(&st, 10ULL);			/* reset */
 	extend_octets(&st, 3000000000ULL);
 	CHECK(extend_octets(&st, 20ULL) == 5000000000ULL + 3000000000ULL + 20ULL,
-	      "second reset from 3e9 on a wide register: got %llu", st.extended);
-
-	/* A register that has not read 2^32 yet keeps the wrap. */
-	memset(&st, 0, sizeof(st));
-	extend_octets(&st, 4294967000ULL);
-	CHECK(extend_octets(&st, 10ULL) == 4294967296ULL + 10ULL,
-	      "a 32-bit wrap still extends: got %llu", st.extended);
+	      "second reset from 3e9: got %llu", st.extended);
 
 	/* The total never goes backwards, whatever the readings do. */
 	{
@@ -210,8 +154,8 @@ static void test_per_port_independence(void)
 	extend_octets(&st[0], 4294967290ULL);
 	extend_octets(&st[2], 10ULL);
 
-	CHECK(extend_octets(&st[0], 10ULL) == 4294967296ULL + 10ULL,
-	      "port 0 should have wrapped independently: got %llu",
+	CHECK(extend_octets(&st[0], 10ULL) == 4294967290ULL + 10ULL,
+	      "port 0 should have been reset independently: got %llu",
 	      st[0].extended);
 	CHECK(extend_octets(&st[2], 20ULL) == 20ULL,
 	      "port 2 should be a plain small counter still: got %llu",
@@ -236,10 +180,8 @@ static void test_port_index(void)
 int main(void)
 {
 	test_format_parse_roundtrip();
-	test_no_wrap_passthrough();
-	test_single_wrap();
-	test_reset_is_not_a_wrap();
-	test_wide_reset();
+	test_no_reset_passthrough();
+	test_fall_is_a_reset();
 	test_per_port_independence();
 	test_port_index();
 

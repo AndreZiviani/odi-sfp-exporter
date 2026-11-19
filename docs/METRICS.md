@@ -81,28 +81,20 @@ side. Mbit/s over a 5-minute window:
 rate(gpon_port_receive_octets_total{port="2"}[5m]) * 8 / 1e6
 ```
 
-`ifInOctets`/`ifOutOctets` are two consecutive 32-bit registers in odi-oss's
-own kernel driver (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), so a correctly
-matched image reports a real 64-bit reading — one read of `ifInOctets` came
-back 5057428519, past 2^32. But a scrape cannot assume the stick it talks to
-is running that driver: rc35 prefers an `/etc/config/metricsd` override over
-the image's own `/bin/metricsd`, and nothing ties that override to a matching
-kernel, so an exporter can end up paired with an older driver that reports
-these as plain 32-bit registers, wrapping at 4.29 GB — which is what a live
-read on one stick showed. So the exporter no longer trusts the field width:
-it tracks the last raw reading per port and extends it into a monotonic
-64-bit total itself (`src/wrap.h`; see docs/DESIGN.md). On a stick with the
-fixed driver the total is the raw reading until the register's first reset
-(port 0's at the first PM boundary, every 15 minutes); from then on it counts
-on from where the register fell, so it is no longer the raw value.
-
-What this does **not** cover: two wraps between two scrapes, i.e. more than
-4.29 GB of traffic inside one scrape interval — at the default 60 s interval,
-about 572 Mbit/s sustained for the whole interval. A shorter `scrape_interval`
-narrows this window directly. Every other MIB counter here (packets, drops,
-errors, pause frames, the frame-size histogram) is a single 32-bit register
-with no equivalent extension, because wrapping one of those needs a sustained
-rate many orders of magnitude higher than this hardware forwards.
+`ifInOctets`/`ifOutOctets` are 64-bit: two consecutive 32-bit registers in
+odi-oss's own kernel driver (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), since its
+first release, and the stock firmware prints them wide too. One read of
+`ifInOctets` came back 5057428519, past 2^32. They do not wrap, but they are
+reset (below), so the exporter tracks the last raw reading per port and keeps
+a running total that counts on from where the register fell (`src/wrap.h`;
+see docs/DESIGN.md). The total is the raw reading until the register's first
+reset (port 0's at the first PM boundary, every 15 minutes) and only grows
+from then on, so it is no longer the raw value. Every fall is a reset,
+whatever it fell from: none is taken for a 32-bit wrap. Every other MIB
+counter here (packets, drops, errors, pause frames, the frame-size histogram)
+is a single 32-bit register with no such total, because wrapping one of those
+needs a sustained rate many orders of magnitude higher than this hardware
+forwards.
 
 **Port 0's counters are reset every 15 minutes; port 2's are not.** Nothing in
 this exporter does it — `omci_app` does, at each OMCI performance-monitoring
@@ -121,15 +113,11 @@ reads across 5 minutes, and every read taken since, it only ever grew.
 
 This does not change the metric type. `counter` is right precisely because
 Prometheus detects a counter reset and handles it; the cost is one interval's
-`rate()` every 15 minutes, on the host-side port. The exporter's own 64-bit
-extension (above) must not turn the reset into a wrap: a reading that falls
-from below 2^31 is a reset and adds only what it holds now, so the total no
-longer jumps by about 3.8 GB at each boundary. So is a fall on a register that
-has read 2^32 or more since the exporter started: it is wider than 32 bits and
-cannot have wrapped (the stock firmware prints these wide, so port 0 falls
-from past 2^32 after an interval of more than 4.29 GB). Only on a register
-that has not read 2^32 yet is a reset from 2^31 or more indistinguishable
-from a wrap by value alone; it still adds up to 2^31 + the new reading.
+`rate()` every 15 minutes, on the host-side port. The exporter's running total
+(above) adds only what the register holds after the reset, so it does not
+jump at each boundary: taking a fall for a 32-bit wrap added about 3.8 GB to
+the 487034420 to 27505987 above, and readings of 1000, 3000000000 and 1000
+exported 4294968296.
 **Port 2 — the PON side, the
 one that answers "is it forwarding" — is unaffected.** Reading remains
 non-destructive either way; the resets come from PM collection, not from

@@ -585,27 +585,21 @@ next:
  *     non-destructive, so a scrape does not steal counts from the web UI or
  *     from a manual diag. Resetting is a separate explicit command
  *     (`diag mib reset counter port ...`), which nothing here ever runs.
- *   - ifInOctets/ifOutOctets are meant to be wider than 32 bits: they are two
- *     consecutive registers in odi-oss's own kernel driver
- *     (odi_switch_mib.c, ODI_SW_MIB_WIDE), and one read of ifInOctets came
- *     back 4881693552, past 2^32. But a scrape does not get to assume the
- *     stick it is talking to is running that driver -- rc35 can load an
- *     /etc/config/metricsd override built against a newer exporter than the
- *     kernel underneath, and an older driver reports these as plain 32-bit
- *     registers that DO wrap, at 4.29 GB. So the exporter tracks the last raw
- *     reading per port and extends it into a monotonic 64-bit total itself
- *     (wrap.h, extend_octets()) rather than trusting the field width. On a
- *     stick with the fixed driver the total is the raw value until the
- *     register's first reset (port 0's comes every 15 minutes, at the PM
- *     boundary); from then on it counts on from where the register fell,
- *     and is no longer the raw value. See docs/DESIGN.md.
+ *   - ifInOctets/ifOutOctets are 64-bit: two consecutive registers in
+ *     odi-oss's own kernel driver (odi_switch_mib.c, ODI_SW_MIB_WIDE), and
+ *     one read of ifInOctets came back 4881693552, past 2^32; the stock
+ *     firmware prints them wide too. They do not wrap, but port 0's are
+ *     reset every 15 minutes, at the PM boundary. The exporter tracks the
+ *     last raw reading per port and keeps a running total that counts on
+ *     from where the register fell (wrap.h, extend_octets()), so the
+ *     exported value is the raw one until the register's first reset and
+ *     only grows. See docs/DESIGN.md.
  *
  * Both properties together mean these are real Prometheus counters. Every
  * other family below is passed straight through as the digits diag printed,
  * with no parsing or accumulation -- only the two octet counters go through
- * extend_octets(), because they are the only ones a register width mismatch
- * can plausibly wrap inside one scrape interval; see docs/METRICS.md for why
- * packet/error/drop counters do not need the same treatment.
+ * extend_octets(); see docs/METRICS.md for why packet/error/drop counters do
+ * not need the same treatment.
  *
  * Ports, established by correlating deltas over one 25 s window: port 2 is the
  * PON side and port 0 the host SerDes side. Their deltas mirror each other —
@@ -633,8 +627,8 @@ struct mib_fam {
 	const char *metric;
 	const char *help;
 	const struct mib_key *keys;	/* terminated by a NULL key */
-	struct octet_state *ostate;	/* non-NULL: extend a wrapped 32-bit
-					 * reading to a monotonic 64-bit total,
+	struct octet_state *ostate;	/* non-NULL: a running total that
+					 * counts on across a register reset,
 					 * one entry per port (wrap.h) */
 };
 
@@ -702,10 +696,10 @@ static const struct mib_key mib_frames[] = {
 };
 
 /*
- * Per-port running totals for the two wide counters, extended past whatever
- * width the register underneath actually turns out to have. File-scope and
- * never reset, so a value only ever grows for the life of the process -- the
- * counter-reset semantics Prometheus expects from a `counter`. See wrap.h.
+ * Per-port running totals for the two wide counters, counted on across the
+ * resets of the register underneath. File-scope and never reset, so a value
+ * only ever grows for the life of the process -- the counter-reset semantics
+ * Prometheus expects from a `counter`. See wrap.h.
  */
 static struct octet_state rx_octet_state[MIB_MAX_PORTS];
 static struct octet_state tx_octet_state[MIB_MAX_PORTS];

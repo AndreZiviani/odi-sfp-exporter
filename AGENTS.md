@@ -37,7 +37,7 @@ other repo, not here.
     src/olt_info.h        gpon_olt_info from omcicli mib get 131 (OLT-G); pure, host-tested
     src/srvflow.h         gpon_omci_services from omcicli dump srvflow, and whether it was an answer; pure, host-tested
     src/transceiver.h     the module alarm flags and gpon_transceiver_up from diag pon get transceiver alarm-status; pure, host-tested
-    src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
+    src/wrap.h            octet-counter running total across resets; no MIPS-specific code
     src/confighash.h      config-store files, stat comparison, md5sum parse; no MIPS-specific code
     src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
     src/start.S           _start and a 6-argument syscall stub for setsockopt

@@ -52,16 +52,16 @@
   silent-client-test` sends requests of 634, 16,034 and 72,034 bytes,
   reads the answer late, and checks that it ends in its last sample.
 
-- `gpon_port_{receive,transmit}_octets_total` no longer go backwards when a
-  64-bit octet register is reset from 2^32 or more. The fall took the
-  32-bit wrap branch, whose term then underflowed: 6000000000 to 1000 was
-  exported as 4294968296, and Prometheus counted the whole new total as
-  growth. The stock firmware prints these registers wide and clears port 0
-  at every PM boundary, so one interval of more than 4.29 GB was enough. A
-  register that has read 2^32 or more is now taken as wide, and every
-  later fall on it as a reset. METRICS.md and the source no longer say a
-  64-bit register is passed through unchanged: it is until its first
-  reset.
+- `gpon_port_{receive,transmit}_octets_total` take every fall of the
+  register for a reset. A fall from 2^31 or more was taken for a 32-bit
+  wrap and added 2^32 to the total: readings of 1000, 3000000000 and 1000
+  were exported as 4294968296, and from 2^32 or more the wrap term
+  underflowed, so 6000000000 to 1000 went backwards to 4294968296. The
+  stock firmware and every odi-oss release print these registers 64 bits
+  wide, and port 0 is cleared at every PM boundary, so a reset is what a
+  fall is. METRICS.md, DESIGN.md and the source no longer describe a 32-bit
+  wrap, nor say a 64-bit register is passed through unchanged: it is until
+  its first reset.
 
 ## v1.11.0 (2026-11-16)
 

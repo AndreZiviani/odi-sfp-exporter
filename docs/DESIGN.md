@@ -42,7 +42,7 @@ src/metrics_body.h    the metrics themselves; every metric name lives here, exce
 src/provision.h       gpon_provision_*: what the OLT provisioned, pure text in and out
 src/gpon_link.h       the GPON link families from /proc/odi_gpon/, pure text in and out
 src/gpon_flow.h       the per-GEM-port families from /proc/odi_gpon/flows, pure text in and out
-src/wrap.h            octet-counter 64-bit wraparound extension; no MIPS-specific code
+src/wrap.h            octet-counter running total across resets; no MIPS-specific code
 src/syscall.h         o32 syscall layer, file reads, fork/exec, decimals
 src/start.S           _start and a 6-argument syscall stub for setsockopt
 test/test_wrap.c      host-native unit test for src/wrap.h (`make test`)
@@ -88,57 +88,34 @@ output, which the exposition format forbids.
 (a hand-written `_start` never sets up `$gp`, so any gp-relative or GOT
 reference faults), and `-msoft-float` (RLX cores have no FPU).
 
-**Octet counters are extended to 64 bits in-process, not polled in a
-background thread.** `gpon_port_{receive,transmit}_octets_total` come from
-`ifInOctets`/`ifOutOctets`, which odi-oss's kernel driver already composes
-from two consecutive 32-bit registers (`odi_switch_mib.c`,
-`ODI_SW_MIB_WIDE`) — a correctly matched image reports the real 64-bit
-value and there is nothing to extend. The problem is that "correctly
-matched" is not guaranteed: `rc35` prefers an `/etc/config/metricsd`
-override over the image's own `/bin/metricsd`, so an exporter build can end
-up paired with an older kernel that still reports these as plain 32-bit
-registers wrapping at 4.29 GB — observed on a live stick. Three designs were
-available:
+**Octet counters keep a running total in-process, across register resets.**
+`gpon_port_{receive,transmit}_octets_total` come from
+`ifInOctets`/`ifOutOctets`, which odi-oss's kernel driver composes from two
+consecutive 32-bit registers (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), as it
+has since its first release; the stock firmware prints them wide too. They do
+not wrap, but port 0's are reset at every PM boundary, and any port by
+`diag mib reset counter` or a driver reload. The exporter tracks the last raw
+reading and a running total per port (`src/wrap.h`, `extend_octets()`): a
+reading that grew adds the difference, and a reading that fell is a reset and
+adds what the register holds now. This rides on the diag invocation the
+scrape is already paying for, no new fork and no new failure domain, and
+passes the raw reading through unchanged until the register's first reset.
+From then on the total counts on from where the register fell (6000000000
+then 1000 is 6000001000), where the raw value would be the 1000: a counter
+either way, so `rate()` over that reset reads the same. Not over a restart of
+the exporter: it starts again from the raw reading, which drops the offset it
+had added, and Prometheus sees a reset where the register had none.
 
-1. **Trust the register width and do nothing.** Correct once every fielded
-   image has the fix, wrong (and silently so — `rate()` cannot distinguish a
-   wrap from a reset) until then.
-2. **Extend in-process on every real scrape** (chosen): track the last raw
-   reading and a running 64-bit total per port (`src/wrap.h`,
-   `extend_octets()`); a reading that goes backwards from the upper half of
-   the register (2^31 or more) is treated as exactly one 32-bit wraparound,
-   and from the lower half as a counter reset, since it cannot have wrapped:
-   port 0 is cleared every 15 minutes and a wrap there added a phantom
-   3.8 GB each time. A register that has read 2^32 or more is wider than
-   32 bits, and every later fall on it is a reset too. This rides on the
-   diag invocation the scrape is already paying for — no new fork, no new
-   failure domain — and passes a register that really is 64-bit through
-   unchanged until its first reset. From then on the total counts on from
-   where the register fell (6000000000 then 1000 is 6000001000), where
-   option 1 would export the 1000: a counter either way, so `rate()` over
-   that reset reads the same. Not over a restart of the exporter: it starts
-   again from the raw reading, which drops the offset it had added, and
-   Prometheus sees a reset where the register had none.
-3. **Poll the counters from a background loop independent of scrapes**, so a
-   wrap between two Prometheus scrapes is caught even if it happens more
-   than once per interval. Rejected for this binary: it is single-threaded
-   and freestanding by design (see above), so this would mean a second
-   process reading the same registers on its own clock and a shared,
-   synchronized 64-bit value between it and the request handler — real
-   engineering for a case (>4.29 GB, i.e. >572 Mbit/s sustained for a full
-   60 s scrape interval) this hardware cannot produce. A shorter
-   `scrape_interval` buys the same headroom for zero code.
+Up to v1.11.0 a fall from the upper half of 32 bits was taken for a 32-bit
+wrap, for an exporter paired with a kernel that reported these as 32-bit
+registers. No odi-oss release does, and the guess cost up to 4.29 GB at a
+reset: 1000, 3000000000 and 1000 exported 4294968296.
 
-The one thing option 2 does not cover is exactly option 3's case: two wraps
-inside one scrape interval. That bound is documented in docs/METRICS.md
-rather than engineered around, because closing it costs a second daemon
-process and shared state for a rate this device cannot sustain.
-
-The same reasoning is why no other MIB counter gets this treatment. Every
-other family (packets, drops, errors, pause frames, the frame-size
-histogram added in v1.1.0) is a single, genuinely 32-bit register per
-`odi_switch_mib.c` — wrapping one of those needs a sustained rate many
-orders of magnitude higher than a GPON ONU's ports forward.
+No other MIB counter gets this treatment. Every other family (packets,
+drops, errors, pause frames, the frame-size histogram added in v1.1.0) is a
+single, genuinely 32-bit register per `odi_switch_mib.c`; wrapping one of
+those needs a sustained rate many orders of magnitude higher than a GPON
+ONU's ports forward.
 
 **`gpon_port_frames_total` replaces `oversize` as an error kind.**
 `etherStatsRxOversizePkts`/`etherStatsTxOversizePkts` are register aliases

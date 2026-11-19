@@ -108,8 +108,12 @@ had added, and Prometheus sees a reset where the register had none.
 
 Up to v1.11.0 a fall from the upper half of 32 bits was taken for a 32-bit
 wrap, for an exporter paired with a kernel that reported these as 32-bit
-registers. No odi-oss release does, and the guess cost up to 4.29 GB at a
-reset: 1000, 3000000000 and 1000 exported 4294968296.
+registers, as odi-oss builds before v1.0.0 did (a live read on one stick
+showed it). No odi-oss release does, and the guess counted 2^32 minus the
+reading it fell from too much, up to 2^31 bytes, at a reset: 1000,
+3000000000 and 1000 exported 4294968296, not 3000001000. Against such a
+pre-release kernel the exporter now undercounts instead: a 32-bit wrap is
+a reset to it, and the total misses 2^32 minus the last reading.
 
 No other MIB counter gets this treatment. Every other family (packets,
 drops, errors, pause frames, the frame-size histogram added in v1.1.0) is a

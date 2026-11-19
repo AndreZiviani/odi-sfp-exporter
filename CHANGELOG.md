@@ -60,14 +60,17 @@
 
 - `gpon_port_{receive,transmit}_octets_total` take every fall of the
   register for a reset. A fall from 2^31 or more was taken for a 32-bit
-  wrap and added 2^32 to the total: readings of 1000, 3000000000 and 1000
-  were exported as 4294968296, and from 2^32 or more the wrap term
-  underflowed, so 6000000000 to 1000 went backwards to 4294968296. The
+  wrap and counted 2^32 minus that reading too much, up to 2^31 bytes:
+  readings of 1000, 3000000000 and 1000 were exported as 4294968296, not
+  3000001000, and from 2^32 or more the wrap term underflowed, so
+  6000000000 to 1000 went backwards to 4294968296. The
   stock firmware and every odi-oss release print these registers 64 bits
   wide, and port 0 is cleared at every PM boundary, so a reset is what a
   fall is. METRICS.md, DESIGN.md and the source no longer describe a 32-bit
   wrap, nor say a 64-bit register is passed through unchanged: it is until
-  its first reset.
+  its first reset. Against an odi-oss build before v1.0.0, whose kernel read
+  these registers 32 bits wide, a wrap now counts as a reset and the total
+  misses 2^32 minus the last reading; the docs say so.
 
 ## v1.11.0 (2026-11-16)
 

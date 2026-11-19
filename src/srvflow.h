@@ -15,8 +15,9 @@
  * those, while omcid was gone. A row cut before its Used value is no answer
  * either. Nor is a text in which omcicli says the dump may be incomplete
  * (odi-oss omcicli: the daemon did not answer the barrier after the rows,
- * stopped answering mid-stream, sent a reply out of order, which means a
- * chunk was lost, or the barrier could not be sent): rows
+ * stopped answering mid-stream, sent a reply that is not the next one it
+ * waited for, a chunk lost or not omcid's, or the barrier could not be
+ * sent): rows
  * before such a line may not be all of them, and a count from them would
  * say "no services" for a service whose row did not come.
  *

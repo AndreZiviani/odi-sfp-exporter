@@ -115,10 +115,11 @@ This does not change the metric type. `counter` is right precisely because
 Prometheus detects a counter reset and handles it; the cost is one interval's
 `rate()` every 15 minutes, on the host-side port. The exporter's running total
 (above) adds only what the register holds after the reset, so it does not
-jump at each boundary. Up to v1.11.0 a fall from a reading of at least 2^31 and
-below 2^32 was taken for a 32-bit wrap and counted 2^32 minus that reading too
-much, up to 2^31 bytes: readings of 1000, 3000000000 and 1000 exported
-4294968296, not 3000001000. Against a driver that reports only the low 32 bits
+jump at each boundary. Up to v1.11.0 any fall from a reading of 2^31 or more
+was taken for a 32-bit wrap. From below 2^32 it counted 2^32 minus that
+reading too much, up to 2^31 bytes: readings of 1000, 3000000000 and 1000
+exported 4294968296, not 3000001000. From more than 2^32 above the new reading
+the total went backwards. Against a driver that reports only the low 32 bits
 of these registers, as an odi-oss build before v1.0.0 did on one stick, a wrap
 between two scrapes that shows as a fall is now a reset, and the total misses
 2^32 minus the last reading at each one; a wrap that ends above the last

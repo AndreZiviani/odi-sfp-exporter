@@ -5,8 +5,8 @@
  * arithmetic, so both the MIPS cross-build and an ordinary host gcc compile it
  * unchanged.
  *
- * Why this exists: the switch's ifInOctets/ifOutOctets are 64-bit. odi-oss's
- * kernel driver composes each from two consecutive 32-bit words
+ * Why this exists: the ifInOctets/ifOutOctets of the switch are 64-bit.
+ * The odi-oss kernel driver composes each from two consecutive 32-bit words
  * (odi_switch_mib.c, ODI_SW_MIB_WIDE), as it has since its first release,
  * and the stock firmware prints them wide too. They do not wrap, but they are
  * reset: port 0 at every PM boundary (omci_app), any port by
@@ -107,8 +107,8 @@ static int port_index(const char *port, unsigned long plen)
  * backwards is a reset: the register restarted, so what it holds now is the
  * traffic since (extended += raw), the same thing Prometheus does with a
  * reset. A 64-bit register does not wrap, so no fall is taken for one,
- * whatever it fell from: port 0's observed 487034420 -> 27505987 at a PM
- * boundary adds 27505987, and a fall to the same reading from 3000000000 or
+ * whatever it fell from: 487034420 -> 27505987, seen on port 0 at a PM
+ * boundary, adds 27505987, and a fall to the same reading from 3000000000 or
  * from 6000000000 adds the same. Taking a fall from the upper half of 32 bits
  * for a 32-bit wrap counted 2^32 - last too much, up to 2^31 bytes, at each
  * such reset (1000, 3000000000, 1000 exported 4294968296, not 3000001000).

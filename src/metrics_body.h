@@ -586,13 +586,13 @@ next:
  *     from a manual diag. Resetting is a separate explicit command
  *     (`diag mib reset counter port ...`), which nothing here ever runs.
  *   - ifInOctets/ifOutOctets are 64-bit: two consecutive registers in
- *     odi-oss's own kernel driver (odi_switch_mib.c, ODI_SW_MIB_WIDE), and
+ *     the kernel driver of odi-oss (odi_switch_mib.c, ODI_SW_MIB_WIDE), and
  *     one read of ifInOctets came back 4881693552, past 2^32; the stock
- *     firmware prints them wide too. They do not wrap, but port 0's are
+ *     firmware prints them wide too. They do not wrap, but those of port 0 are
  *     reset every 15 minutes, at the PM boundary. The exporter tracks the
  *     last raw reading per port and keeps a running total that counts on
  *     from where the register fell (wrap.h, extend_octets()), so the
- *     exported value is the raw one until the register's first reset and
+ *     exported value is the raw one until the first reset of the register and
  *     only grows. See docs/DESIGN.md.
  *
  * Both properties together mean these are real Prometheus counters. Every

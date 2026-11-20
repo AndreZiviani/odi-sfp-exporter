@@ -28,6 +28,7 @@
 #include "transceiver.h"
 #include "image_info.h"
 #include "olt_info.h"
+#include "srvflow.h"
 
 #define DIAG_PATH "/bin/diag"
 
@@ -584,26 +585,21 @@ next:
  *     non-destructive, so a scrape does not steal counts from the web UI or
  *     from a manual diag. Resetting is a separate explicit command
  *     (`diag mib reset counter port ...`), which nothing here ever runs.
- *   - ifInOctets/ifOutOctets are meant to be wider than 32 bits: they are two
- *     consecutive registers in odi-oss's own kernel driver
- *     (odi_switch_mib.c, ODI_SW_MIB_WIDE), and one read of ifInOctets came
- *     back 4881693552, past 2^32. But a scrape does not get to assume the
- *     stick it is talking to is running that driver -- rc35 can load an
- *     /etc/config/metricsd override built against a newer exporter than the
- *     kernel underneath, and an older driver reports these as plain 32-bit
- *     registers that DO wrap, at 4.29 GB. So the exporter tracks the last raw
- *     reading per port and extends it into a monotonic 64-bit total itself
- *     (wrap.h, extend_octets()) rather than trusting the field width. On a
- *     stick with the fixed driver this is a no-op: the reading never goes
- *     backwards, so the "extend" path never fires and the total tracks the
- *     raw value exactly. See docs/DESIGN.md.
+ *   - ifInOctets/ifOutOctets are 64-bit: two consecutive registers in
+ *     the kernel driver of odi-oss (odi_switch_mib.c, ODI_SW_MIB_WIDE), and
+ *     one read of ifInOctets came back 4881693552, past 2^32; the stock
+ *     firmware prints them wide too. They do not wrap, but those of port 0 are
+ *     reset every 15 minutes, at the PM boundary. The exporter tracks the
+ *     last raw reading per port and keeps a running total that counts on
+ *     from where the register fell (wrap.h, extend_octets()), so the
+ *     exported value is the raw one until the first reset of the register and
+ *     only grows. See docs/DESIGN.md.
  *
  * Both properties together mean these are real Prometheus counters. Every
  * other family below is passed straight through as the digits diag printed,
  * with no parsing or accumulation -- only the two octet counters go through
- * extend_octets(), because they are the only ones a register width mismatch
- * can plausibly wrap inside one scrape interval; see docs/METRICS.md for why
- * packet/error/drop counters do not need the same treatment.
+ * extend_octets(); see docs/METRICS.md for why packet/error/drop counters do
+ * not need the same treatment.
  *
  * Ports, established by correlating deltas over one 25 s window: port 2 is the
  * PON side and port 0 the host SerDes side. Their deltas mirror each other —
@@ -631,8 +627,8 @@ struct mib_fam {
 	const char *metric;
 	const char *help;
 	const struct mib_key *keys;	/* terminated by a NULL key */
-	struct octet_state *ostate;	/* non-NULL: extend a wrapped 32-bit
-					 * reading to a monotonic 64-bit total,
+	struct octet_state *ostate;	/* non-NULL: a running total that
+					 * counts on across a register reset,
 					 * one entry per port (wrap.h) */
 };
 
@@ -700,10 +696,10 @@ static const struct mib_key mib_frames[] = {
 };
 
 /*
- * Per-port running totals for the two wide counters, extended past whatever
- * width the register underneath actually turns out to have. File-scope and
- * never reset, so a value only ever grows for the life of the process -- the
- * counter-reset semantics Prometheus expects from a `counter`. See wrap.h.
+ * Per-port running totals for the two wide counters, counted on across the
+ * resets of the register underneath. File-scope and never reset, so a value
+ * only ever grows for the life of the process -- the counter-reset semantics
+ * Prometheus expects from a `counter`. See wrap.h.
  */
 static struct octet_state rx_octet_state[MIB_MAX_PORTS];
 static struct octet_state tx_octet_state[MIB_MAX_PORTS];
@@ -1028,46 +1024,60 @@ static void emit_omci_up(int fd, int up)
 {
 	emit_header(fd, "gpon_omci_up",
 		    "1 when omcicli got an answer from omcid within "
-		    "OMCICLI_TIMEOUT_MS; 0 means omcid did not answer in time "
-		    "and the child was killed -- gpon_omci_services below is "
-		    "stale or absent.", "gauge");
+		    "OMCICLI_TIMEOUT_MS; 0 means omcid did not answer: no "
+		    "answer in time (the child was killed), or omcicli printed "
+		    "only its own error -- gpon_omci_services below is then "
+		    "absent.", "gauge");
 	put_fd(fd, "gpon_omci_up ");
 	put_fd(fd, up ? "1\n" : "0\n");
 }
 
+static void omci_feed(void *ctx, const char *p, unsigned long n)
+{
+	srvflow_feed((struct srvflow_scan *)ctx, p, n);
+}
+
 /* Returns 1 when omcid answered, so the provisioning read below is skipped
- * against a stuck one rather than spending a second OMCICLI_TIMEOUT_MS. */
+ * against a stuck one rather than spending a second OMCICLI_TIMEOUT_MS. The
+ * dump is read through to its end and counted as it comes (src/srvflow.h):
+ * the vendor one is about 18 KB, and the row in use can be the last. */
 static int emit_omci_metrics(int fd)
 {
 	static char *const argv[] = { "omcicli", "dump", "srvflow", 0 };
-	char buf[8192];
-	unsigned long i, used = 0;
-	long n = run_to_buf(OMCICLI_PATH, argv, buf, sizeof(buf) - 1,
-			    OMCICLI_TIMEOUT_MS);
+	struct srvflow_scan scan;
+	long used;
+	long n;
 
+	srvflow_init(&scan);
+	n = run_to_feed(OMCICLI_PATH, argv, OMCICLI_TIMEOUT_MS, omci_feed, &scan);
 	if (n <= 0) {
-		/* n == -1: no omcicli, or the fork/pipe setup itself failed --
-		 * nothing ran, so there is nothing to call "down". n == -2:
-		 * omcicli ran but omcid never answered it within the bound
-		 * (the respawn/0x800 bug this metric exists to catch) -- that
-		 * IS down, and must say so rather than go quiet. */
+		/* n == -2: omcicli ran but did not finish within the bound,
+		 * omcid never answered it (the respawn/0x800 bug this metric
+		 * exists to catch) -- that IS down, and must say so rather
+		 * than go quiet. n == 0: it printed nothing. That is what an
+		 * image without omcicli gives (the exec fails in the child),
+		 * and an omcicli that prints its answer somewhere else would
+		 * look the same, so it is not called down: the metric is left
+		 * out, as for n == -1, where nothing could be started. */
 		if (n == -2)
 			emit_omci_up(fd, 0);
 		return 0;
 	}
-	buf[n] = 0;
-	for (i = 0; buf[i]; i++)
-		if (buf[i] == 'U' && buf[i + 1] == 's' && buf[i + 2] == 'e' &&
-		    buf[i + 3] == 'd' && buf[i + 4] == ':' && buf[i + 5] == ' ' &&
-		    buf[i + 6] == '1')
-			used++;
+	/* Text that is not a service table is omcicli's own error (no queue,
+	 * send failed on a full one, no answer): omcid did not answer, the
+	 * same as a timeout, and the provisioning reads are skipped too. */
+	used = srvflow_end(&scan);
+	if (used < 0) {
+		emit_omci_up(fd, 0);
+		return 0;
+	}
 	emit_omci_up(fd, 1);
 	emit_header(fd, "gpon_omci_services",
 		    "Bridge connections (services) the OLT has provisioned and the ONU "
 		    "installed, from `omcicli dump srvflow`. 0 at O5 means synced but "
 		    "not provisioned.", "gauge");
 	put_fd(fd, "gpon_omci_services ");
-	put_u32_fd(fd, used);
+	put_u32_fd(fd, (unsigned long)used);
 	put_fd(fd, "\n");
 	return 1;
 }

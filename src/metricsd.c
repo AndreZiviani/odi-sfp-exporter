@@ -35,6 +35,58 @@
 #define SEND_WAIT_S     10
 #define SEND_DEADLINE_S 30
 
+/* After the response the connection is closed in stages (RFC 9112, 9.6):
+ * shutdown(SHUT_WR) sends the FIN, then whatever the client still sends
+ * is read and dropped until it closes too. Closing with request bytes
+ * unread makes Linux answer with an RST instead of a FIN, and the RST
+ * throws away what is still queued for the client: a request longer than
+ * the one read in serve() takes, or one sent in two segments, ended the
+ * scrape in "connection reset by peer", which Prometheus counts as a
+ * failed scrape. A client that closes on EOF (Prometheus, curl, a browser
+ * with Connection: close) costs one round trip here. One that stays open
+ * is left after LINGER_MS of silence, and one that keeps sending after
+ * LINGER_MAX_MS in all: what has arrived by then is read, however much.
+ * Without a clock LINGER_MAX_MS is a budget of waits, each charged in full,
+ * and each wake reads what is already there, up to LINGER_ROUND_MAX. */
+#define LINGER_MS        500
+#define LINGER_MAX_MS    2000
+#define LINGER_ROUND_MAX 65536
+
+static void hang_up(int conn)
+{
+	char buf[1024];
+	struct pollfd pfd;
+	unsigned long t0 = 0;
+	long budget = LINGER_MAX_MS;
+	int clock = mono_ms(&t0);
+
+	/* Cut off (write timeout or deadline): close at once, as before. */
+	if (conn == write_failed_fd)
+		return;
+	if (syscall3(__NR_shutdown, conn, SHUT_WR, 0) < 0)
+		return;
+	pfd.fd = conn;
+	pfd.events = POLLIN;
+	for (;;) {
+		long wait = deadline_wait(clock, t0, LINGER_MAX_MS, &budget, LINGER_MS);
+		unsigned long round = 0;
+
+		pfd.revents = 0;
+		if (!wait || syscall3(__NR_poll, (long)&pfd, 1, wait) <= 0)
+			return;
+		/* This read, and whatever else is there already. */
+		do {
+			long n = syscall3(__NR_read, conn, (long)buf, sizeof(buf));
+
+			if (n <= 0)
+				return;		/* the client closed, or the socket failed */
+			round += (unsigned long)n;
+			pfd.revents = 0;
+		} while (round < LINGER_ROUND_MAX &&
+			 syscall3(__NR_poll, (long)&pfd, 1, 0) > 0);
+	}
+}
+
 static unsigned long parse_u16(const char *s, unsigned long fallback)
 {
 	unsigned long v = 0;
@@ -73,9 +125,9 @@ static void serve(int conn)
 		   (long)tv, sizeof(tv), 0);
 
 	/* Read the request and discard it: we answer the same on every path.
-	 * Draining it matters anyway — replying to an unread request invites the
-	 * client's close to arrive as an RST that discards our response. The
-	 * poll above means this read does not block. */
+	 * One read takes a request of up to 511 bytes that has arrived whole;
+	 * hang_up() drops the rest, if any, before the close. The poll above
+	 * means this read does not block. */
 	if (syscall3(__NR_read, conn, (long)req, sizeof(req) - 1) <= 0)
 		return;
 
@@ -91,6 +143,7 @@ static void serve(int conn)
 	       "Connection: close\r\n"
 	       "\r\n");
 	emit_metrics(conn);
+	hang_up(conn);
 }
 
 int main(int argc, char **argv)

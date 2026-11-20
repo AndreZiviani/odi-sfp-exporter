@@ -81,26 +81,20 @@ side. Mbit/s over a 5-minute window:
 rate(gpon_port_receive_octets_total{port="2"}[5m]) * 8 / 1e6
 ```
 
-`ifInOctets`/`ifOutOctets` are two consecutive 32-bit registers in odi-oss's
-own kernel driver (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), so a correctly
-matched image reports a real 64-bit reading — one read of `ifInOctets` came
-back 5057428519, past 2^32. But a scrape cannot assume the stick it talks to
-is running that driver: rc35 prefers an `/etc/config/metricsd` override over
-the image's own `/bin/metricsd`, and nothing ties that override to a matching
-kernel, so an exporter can end up paired with an older driver that reports
-these as plain 32-bit registers, wrapping at 4.29 GB — which is what a live
-read on one stick showed. So the exporter no longer trusts the field width:
-it tracks the last raw reading per port and extends it into a monotonic
-64-bit total itself (`src/wrap.h`; see docs/DESIGN.md). On a stick with the
-fixed driver this is a no-op, since the reading then never goes backwards.
-
-What this does **not** cover: two wraps between two scrapes, i.e. more than
-4.29 GB of traffic inside one scrape interval — at the default 60 s interval,
-about 572 Mbit/s sustained for the whole interval. A shorter `scrape_interval`
-narrows this window directly. Every other MIB counter here (packets, drops,
-errors, pause frames, the frame-size histogram) is a single 32-bit register
-with no equivalent extension, because wrapping one of those needs a sustained
-rate many orders of magnitude higher than this hardware forwards.
+`ifInOctets`/`ifOutOctets` are 64-bit: two consecutive 32-bit registers in
+odi-oss's own kernel driver (`odi_switch_mib.c`, `ODI_SW_MIB_WIDE`), since its
+first release, and the stock firmware prints them wide too. One read of
+`ifInOctets` came back 5057428519, past 2^32. They do not wrap, but they are
+reset (below), so the exporter tracks the last raw reading per port and keeps
+a running total that counts on from where the register fell (`src/wrap.h`;
+see docs/DESIGN.md). The total is the raw reading until the register's first
+reset (port 0's at the first PM boundary, every 15 minutes) and only grows
+from then on, so it is no longer the raw value. Every fall is a reset,
+whatever it fell from: none is taken for a 32-bit wrap. Every other MIB
+counter here (packets, drops, errors, pause frames, the frame-size histogram)
+is a single 32-bit register with no such total, because wrapping one of those
+needs a sustained rate many orders of magnitude higher than this hardware
+forwards.
 
 **Port 0's counters are reset every 15 minutes; port 2's are not.** Nothing in
 this exporter does it — `omci_app` does, at each OMCI performance-monitoring
@@ -119,12 +113,18 @@ reads across 5 minutes, and every read taken since, it only ever grew.
 
 This does not change the metric type. `counter` is right precisely because
 Prometheus detects a counter reset and handles it; the cost is one interval's
-`rate()` every 15 minutes, on the host-side port. The exporter's own 64-bit
-extension (above) must not turn the reset into a wrap: a reading that falls
-from below 2^31 is a reset and adds only what it holds now, so the total no
-longer jumps by about 3.8 GB at each boundary. A reset from 2^31 or more is
-indistinguishable from a wrap by value alone and still adds up to
-2^31 + the new reading. **Port 2 — the PON side, the
+`rate()` every 15 minutes, on the host-side port. The exporter's running total
+(above) adds only what the register holds after the reset, so it does not
+jump at each boundary. Up to v1.11.0 any fall from a reading of 2^31 or more
+was taken for a 32-bit wrap. From below 2^32 it counted 2^32 minus that
+reading too much, up to 2^31 bytes: readings of 1000, 3000000000 and 1000
+exported 4294968296, not 3000001000. From more than 2^32 above the new reading
+the total went backwards. Against a driver that reports only the low 32 bits
+of these registers, as an odi-oss build before v1.0.0 did on one stick, a wrap
+between two scrapes that shows as a fall is now a reset, and the total misses
+2^32 minus the last reading at each one; a wrap that ends above the last
+reading (100, then 200) is not seen at all and misses 2^32.
+**Port 2 — the PON side, the
 one that answers "is it forwarding" — is unaffected.** Reading remains
 non-destructive either way; the resets come from PM collection, not from
 scraping.
@@ -210,8 +210,8 @@ each, bounded at `OMCICLI_TIMEOUT_MS`, 2 s), and from `/proc/odi_gpon/status`:
 
 | metric | source |
 |---|---|
-| `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time; 0 is a stuck omcid, and the families below are then stale or absent |
-| `gpon_omci_services` | `omcicli dump srvflow` -- bridge connections installed; 0 at O5 is synced but not provisioned |
+| `gpon_omci_up` | 1 when `omcicli dump srvflow` answered in time with a service table; 0 is an omcid that did not answer: none in time, omcicli printed only its own error (no command queue, send failed on a full one), or it said the dump may be incomplete or a reply came with an unexpected sequence number, rows before that line or not. An omcicli that hangs after its answer is 0 as well. `gpon_omci_services` and what `omcicli provision` gives are then absent, and `gpon_olt_info` is not read again; the T-CONTs from `/proc` still come, and an OLT-G read earlier while its cache is valid (until the ONU state moves, an hour at most). Absent when omcicli printed nothing at all, as on an image without it |
+| `gpon_omci_services` | `omcicli dump srvflow` -- bridge connections installed; 0 at O5 is synced but not provisioned. The vendor omcicli says nothing when its dump is cut short, so from it a cut dump can read as fewer services, an undercount nothing here can see; odi-oss omcicli says so, and `gpon_omci_up` is then 0 |
 | `gpon_provision_tconts` | `/proc/odi_gpon/status`, `alloc_ids` -- T-CONTs the OLT assigned by PLOAM (Assign_Alloc-ID) |
 | `gpon_provision_tcont_info{alloc_id}` | same, 1 per Alloc-ID |
 | `gpon_provision_gem_ports` | `omcicli provision` -- GEM port network CTPs the OLT created |

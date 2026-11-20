@@ -57,7 +57,7 @@ endif
 
 LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
 
-HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/slot_state.h src/host_link.h src/respawn_state.h src/cpu_stat.h src/provision.h
+HDRS := $(wildcard src/*.h)
 
 # BUILD_ID is compiled in, but it is a make VARIABLE -- make cannot see it
 # change, so with the sources untouched it will not rebuild and the binary keeps
@@ -77,8 +77,18 @@ HDRS := src/syscall.h src/metrics_body.h src/resetinfo.h src/confighash.h src/sl
 $(BUILD)/.build-id: FORCE | $(BUILD)
 	@printf '%s' '$(BUILD_ID)' | cmp -s - $@ 2>/dev/null || printf '%s' '$(BUILD_ID)' > $@
 
-$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) $(BUILD)/.build-id | $(BUILD)
+# src itself as well: a header deleted from it is no longer in HDRS, and
+# without the directory's mtime nothing would be newer than the binary, so
+# the include that still names it would not fail until the next clean build.
+$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id | $(BUILD)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter %.S %.c,$^)
+	$(STRIP) $@
+
+# The same program with mono_ms() answering that the kernel has no clock,
+# for the deadlines that are then a budget of waits (make omcicli-test).
+# Never shipped.
+$(BUILD)/metricsd-noclock: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id | $(BUILD)
+	$(CC) $(CFLAGS) -DMETRICSD_TEST_NO_CLOCK $(LDFLAGS) -o $@ $(filter %.S %.c,$^)
 	$(STRIP) $@
 
 $(BUILD):
@@ -90,7 +100,7 @@ else
 
 RUN   := docker run --rm -v "$(CURDIR)":/src -w /src $(IMAGE)
 
-.PHONY: all httpd image verify isa test silent-client-test rules run deploy shell clean release sums
+.PHONY: all httpd image verify isa test silent-client-test omcicli-test rules run deploy shell clean release sums
 
 # What you almost always want: the exporter, checked.
 all: httpd verify isa test
@@ -109,7 +119,7 @@ httpd: image
 
 # src/wrap.h (the octet-counter wraparound logic), src/resetinfo.h (the
 # /proc/odi_ramlog_prev parse), src/confighash.h (the md5sum parse and stat
-# comparison behind gpon_config_info), src/slot_state.h, src/host_link.h, src/respawn_state.h, src/cpu_stat.h, src/provision.h, src/transceiver.h and
+# comparison behind gpon_config_info), src/slot_state.h, src/host_link.h, src/respawn_state.h, src/cpu_stat.h, src/provision.h, src/transceiver.h, src/srvflow.h and
 # the mib_* tables in src/metrics_body.h have no MIPS-specific code, so they
 # are tested with the HOST compiler -- no Docker, no qemu-user. The
 # test_*.c files are real unit tests; test_metrics.sh is a fixture check on
@@ -120,7 +130,7 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat test_image_info test_olt_info; do \
+	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat test_image_info test_olt_info test_srvflow; do \
 		t=$$(mktemp); \
 		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
 		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \
@@ -161,9 +171,20 @@ run: image
 	@$(RUN) qemu-mips-static $(BIN) $(ARGS)
 
 # The accept loop under qemu-user: a client that connects and sends nothing
-# must not hold the scrapes behind it (test/test_silent_client.py).
+# must not hold the scrapes behind it, and a request longer than one read
+# must still end in a clean close (test/test_silent_client.py).
 silent-client-test: httpd
 	$(RUN) python3 test/test_silent_client.py $(BIN)
+
+# What a scrape reports for each way omcicli can answer, under qemu-user
+# with a stand-in /bin/omcicli inside the container (test/test_omcicli.py):
+# the vendor dump with its one service in row 200, odi-oss omcid, omcicli's
+# own error, nothing at all, a child that does not finish in 2 s and one
+# that keeps writing; then an answer with pauses in it, a silent child and
+# the one that keeps writing again, from a build without a clock.
+omcicli-test: httpd
+	$(RUN) make IN_CONTAINER=1 BUILD_ID='$(BUILD_ID)' $(BUILD)/metricsd-noclock
+	$(RUN) python3 test/test_omcicli.py $(BIN) $(BUILD)/metricsd-noclock
 
 ## --- moving files ------------------------------------------------------------
 

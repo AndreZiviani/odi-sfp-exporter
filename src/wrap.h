@@ -1,21 +1,20 @@
 /*
- * The counter-width logic, split out from metrics_body.h so it can be tested
+ * The octet-counter logic, split out from metrics_body.h so it can be tested
  * with a host compiler (test/test_wrap.c) instead of only under qemu-user.
  * Deliberately dependency-free: no syscalls, no libc, just integer
  * arithmetic, so both the MIPS cross-build and an ordinary host gcc compile it
  * unchanged.
  *
- * Why this exists: the switch's ifInOctets/ifOutOctets registers are two
- * consecutive 32-bit words (odi-oss's kernel driver, odi_switch_mib.c,
- * ODI_SW_MIB_WIDE) and diag composes and prints the full 64-bit decimal. That
- * makes extending it here look redundant, and on a stick running the fixed
- * driver it is -- see extend_octets() below, which is then a no-op. It is not
- * free insurance to skip: rc35 prefers /etc/config/metricsd over the image's
- * own /bin/metricsd, but nothing ties that override to a matching kernel, so
- * an exporter can end up paired with an older driver that reports these as
- * plain 32-bit registers wrapping at 4.29 GB. A busy PON port can cross that
- * within one scrape interval, and Prometheus rate() cannot tell a wrap from a
- * counter reset. See docs/DESIGN.md and docs/METRICS.md.
+ * Why this exists: the ifInOctets/ifOutOctets of the switch are 64-bit.
+ * The odi-oss kernel driver composes each from two consecutive 32-bit words
+ * (odi_switch_mib.c, ODI_SW_MIB_WIDE), as it has since its first release,
+ * and the stock firmware prints them wide too. They do not wrap, but they are
+ * reset: port 0 at every PM boundary (omci_app), any port by
+ * `diag mib reset counter` or a driver reload. extend_octets() below keeps a
+ * running total per port that counts on from where the register fell, so
+ * the exported counter only grows. See docs/DESIGN.md and docs/METRICS.md.
+ * An odi-oss build before v1.0.0 reported only their low 32 bits; against a
+ * driver like that this undercounts (extend_octets()).
  */
 
 #ifndef ODI_WRAP_H
@@ -102,32 +101,23 @@ static int port_index(const char *port, unsigned long plen)
 }
 
 /*
- * A reading that went backwards is a 32-bit wraparound only if the counter
- * could have wrapped: it has to have been in the upper half of the register
- * (>= 2^31) when last read. Below that, no traffic a scrape interval can
- * carry takes it past 2^32 and back, so the reading was reset instead --
- * port 0's counters are cleared every 15 minutes by omci_app (docs/METRICS.md),
- * and `diag mib reset counter` or a driver reload does the same to any port.
- * Treating that as a wrap added a phantom 2^32 - last + raw, about 3.8 GB on
- * the observed 487034420 -> 27505987, every 15 minutes.
- */
-#define WRAP_MIN_LAST (1ULL << 31)
-
-/*
  * Extend one raw reading against the running per-port total.
  *
- * A value that grew since the last scrape is a plain delta -- the case that
- * always applies once the underlying register is genuinely 64-bit, since it
- * then never appears to shrink. A value that went backwards from the upper
- * half of the register is treated as exactly one 32-bit wraparound of the low
- * word; see the file comment for the bound this does not cover (more than one
- * wrap between two scrapes). A value that went backwards from the lower half
- * is a reset: the counter restarted, so what it holds now is the traffic since
- * (extended += raw), the same thing Prometheus does with a reset.
- *
- * What stays ambiguous: a reset from a reading >= 2^31 looks exactly like a
- * wrap, and still adds 2^32 - last + raw, at most 2^31 + raw -- half the old
- * error, and only on a port busy enough to hold 2 GB between two resets.
+ * A value that grew since the last scrape is a plain delta. A value that went
+ * backwards is a reset: the register restarted, so what it holds now is the
+ * traffic since (extended += raw), the same thing Prometheus does with a
+ * reset. A 64-bit register does not wrap, so no fall is taken for one,
+ * whatever it fell from: 487034420 -> 27505987, seen on port 0 at a PM
+ * boundary, adds 27505987, and a fall to the same reading from 3000000000 or
+ * from 6000000000 adds the same. Taking a fall from the upper half of 32 bits
+ * for a 32-bit wrap counted 2^32 - last too much, up to 2^31 bytes, at each
+ * such reset (1000, 3000000000, 1000 exported 4294968296, not 3000001000).
+ * The other side of that: a driver that reports only the low 32 bits of these
+ * registers, as an odi-oss build before v1.0.0 did, has a wrap between two
+ * scrapes that shows as a fall counted as a reset, and the total misses
+ * 2^32 - last at each one; a wrap that ends above the last reading (100,
+ * then 200) is not seen at all and misses 2^32. No release reads them so:
+ * odi-oss odi_switch_mib.c reads them wide (ODI_SW_MIB_WIDE) since v1.0.0.
  */
 static unsigned long long extend_octets(struct octet_state *st, unsigned long long raw)
 {
@@ -136,8 +126,6 @@ static unsigned long long extend_octets(struct octet_state *st, unsigned long lo
 		st->extended = raw;
 	} else if (raw >= st->last_raw) {
 		st->extended += raw - st->last_raw;
-	} else if (st->last_raw >= WRAP_MIN_LAST) {
-		st->extended += (raw + (1ULL << 32)) - st->last_raw;
 	} else {
 		st->extended += raw;
 	}

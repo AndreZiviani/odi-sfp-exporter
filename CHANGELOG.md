@@ -2,6 +2,82 @@
 
 ## Unreleased
 
+- Build: `make httpd` rebuilds `build/metricsd` after an edit to any
+  header in `src/`, and after one is added or removed. Seven headers were
+  missing from the Makefile's list, so once the tree was dirty an edit to
+  one of them left the binary from before it in place. `make verify`,
+  `make deploy` and the other targets that take `BIN` use the binary as
+  it is.
+
+- `gpon_omci_up` is 0 when omcicli prints only its own error, not 1. Any
+  text from an omcicli that ended in time counted as an answer, so `% no
+  command queue at key 0x800` (omcid not started) and `% send failed` (a
+  queue nobody reads, full after about 8 minutes of scrapes) both gave
+  `gpon_omci_up 1` and `gpon_omci_services 0`: OdiOmciDown never fired or
+  cleared by itself, and OdiOmciNoServices sent the operator to check the
+  serial number. An answer now has a `SERVID` row with its `Used` value
+  (the vendor omci_app) or the count line odi-oss omcid ends with (`0
+  services`), whose number is then the count; the reading is
+  `src/srvflow.h`, tested by `test/test_srvflow.c`. A text in which
+  omcicli says the dump may be incomplete (no answer to its barrier, the
+  daemon stopped mid-stream, a reply with an unexpected sequence number)
+  is no answer either, rows before that line or not: a count from them
+  could miss the row in use. The vendor omcicli says nothing when its dump
+  is cut short; METRICS.md says so. The provisioning and OLT-G reads are
+  skipped after such an error, as after a timeout. The OdiOmciDown
+  description lists what to check instead of saying which of them it is.
+
+- `gpon_omci_services` counts a service in any row of the vendor dump.
+  metricsd kept the first 8 KB of `omcicli dump srvflow`, fewer than half
+  of the 256 rows the vendor omci_app prints, so a service in a later row
+  was not counted and OdiOmciNoServices could fire on a provisioned ONU.
+  The dump is now counted as it is read, to its end. With a working clock,
+  one 2 s deadline bounds the waits of the whole omcicli run, its exit
+  included: an omcicli that closed its output and did not exit held the
+  scrape until it did, and is now killed and counted as no answer. A child
+  the kernel reaped on its own, under a launcher that ignores SIGCHLD,
+  counts as exited. Without a working clock the deadline is a budget of
+  100 ms waits, so it still ends, and a wait that ends quiet goes on to
+  the next; with a clock such a wait was the rest of the deadline and ends
+  the run. `make omcicli-test` runs metricsd against stand-ins for
+  `/bin/omcicli`, once more with SIGCHLD ignored, and from a build without
+  a clock (`build/metricsd-noclock`, never shipped) against an answer with
+  pauses in it. It checks that a silent child holds the scrape for at
+  least 1.8 s, and tells the build without a clock by how soon it cuts off
+  a child that keeps writing.
+
+- A scrape whose request is longer than 511 bytes, or arrives in two
+  segments, no longer ends in "connection reset by peer". metricsd read the
+  request once and closed with the rest unread, so Linux sent an RST
+  instead of a FIN and dropped what was still queued for the client:
+  Prometheus counted a failed scrape, curl exited with 56. Extra headers
+  (basic auth, a proxy, a browser with the confd session cookie) were
+  enough. metricsd now closes in stages after the response: it sends its
+  FIN with `shutdown()`, then reads and drops what the client still sends
+  until the client closes or stays silent for 500 ms, for at most 2 s in
+  all: a request that has arrived by then is read whole, however long
+  (without a working clock, the 2 s are a budget of waits). `make
+  silent-client-test` sends requests of 634, 16,034 and 72,034 bytes,
+  reads the answer late, and checks that it ends in its last sample.
+
+- `gpon_port_{receive,transmit}_octets_total` take every fall of the
+  register for a reset. A fall from a reading of at least 2^31 and below
+  2^32 was taken for a 32-bit wrap and counted 2^32 minus that reading too
+  much, up to 2^31 bytes: readings of 1000, 3000000000 and 1000 were
+  exported as 4294968296, not 3000001000. From a reading more than 2^32
+  above the new one the wrap term underflowed, so 6000000000 to 1000 went
+  backwards to 4294968296. The stock firmware and every odi-oss release
+  print these registers 64 bits wide (`ODI_SW_MIB_WIDE` in odi-oss
+  `odi_switch_mib.c` since v1.0.0), and port 0 is cleared at every PM
+  boundary, so a reset is what a fall is. METRICS.md, DESIGN.md and the
+  source no longer describe a 32-bit wrap, nor say a 64-bit register is
+  passed through unchanged: it is until its first reset. Against a driver
+  that reports only the low 32 bits of these registers, as an odi-oss
+  build before v1.0.0 did on one stick, a wrap between two scrapes that
+  shows as a fall now counts as a reset and the total misses 2^32 minus
+  the last reading; one that ends above the last reading is not seen at
+  all and misses 2^32. The docs say so.
+
 ## v1.11.0 (2026-11-16)
 
 - A client that connects and sends nothing no longer holds every scrape

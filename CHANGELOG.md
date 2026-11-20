@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.11.1 (2026-11-20)
+
 - Build: `make httpd` rebuilds `build/metricsd` after an edit to any
   header in `src/`, and after one is added or removed. Seven headers were
   missing from the Makefile's list, so once the tree was dirty an edit to

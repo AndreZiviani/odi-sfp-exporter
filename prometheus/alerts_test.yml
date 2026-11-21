@@ -386,8 +386,8 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, job: odi, instance: s1}
             exp_annotations:
-              summary: "s1: 2.5MiB available"
-              description: "Available memory (MemAvailable, or free plus buffers plus cached where the kernel has no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
+              summary: "s1: memory low, 2.5MiB"
+              description: "Available memory (MemAvailable, or free plus buffers plus cached as an estimate where the kernel or an older exporter gives no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
 
   # MemAvailable exported: it decides, not the larger free + buffers +
   # cached. Low available fires although the sum is 8 MiB.
@@ -407,8 +407,8 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, job: odi, instance: s1}
             exp_annotations:
-              summary: "s1: 3MiB available"
-              description: "Available memory (MemAvailable, or free plus buffers plus cached where the kernel has no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
+              summary: "s1: memory low, 3MiB"
+              description: "Available memory (MemAvailable, or free plus buffers plus cached as an estimate where the kernel or an older exporter gives no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
 
   # And the other way: a sum under 4 MiB does not fire while MemAvailable,
   # which counts reclaimable slab too, is above it.

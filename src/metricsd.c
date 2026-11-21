@@ -24,8 +24,9 @@
 /*
  * -ftrivial-auto-var-init=zero (Makefile) clears a large local with a call
  * to memset, whatever -ffreestanding and -fno-builtin say, so it has to
- * exist. Built with -fno-tree-loop-distribute-patterns, without which gcc
- * recognises this loop as a memset and calls itself.
+ * exist. Built with -fno-tree-loop-distribute-patterns as a precaution: gcc
+ * can recognise this loop as a memset and turn it into a call to itself
+ * (seen at -O2 without -ffreestanding, not with the flags here).
  */
 void *memset(void *dst, int c, unsigned long n);
 void *memset(void *dst, int c, unsigned long n)

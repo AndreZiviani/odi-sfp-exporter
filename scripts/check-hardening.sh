@@ -4,7 +4,8 @@
 #
 # check-hardening.sh <cross-prefix> <elf>...
 #
-# Fails when metricsd has lost a mitigation of HARDEN_CFLAGS (Makefile).
+# Fails when metricsd has lost a mitigation of the hardening flags the
+# Makefile adds to CFLAGS.
 # The same check as odi-oss tools/check-hardening.sh. Run by the Makefile on
 # the binary after the link and before the strip, because the stack
 # protector checks need the symbol table. POSIX sh, with the toolchain

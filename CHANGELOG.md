@@ -12,14 +12,16 @@
   line on stderr and, where `/dev/kmsg` opens, in the kernel log, instead
   of returning into overwritten data. `scripts/check-hardening.sh` checks
   every build before the strip, and a binary that fails it is deleted. The
-  binary grows by 3.3 KB (66,932 to 70,260 bytes) and uses no instruction
+  binary grows by 3.3 KB (66,872 to 70,248 bytes with the pinned toolchain) and uses no instruction
   mnemonic it did not use before (odi-oss#482).
 
 - `gpon_memory_bytes{kind="available"}` is `MemAvailable` from
   `/proc/meminfo`, the value the odi-oss watchdog resets the stick on when
   it stays under 2 MB. OdiMemoryLow fires on it under 4 MiB; only on a
   kernel without that line (the stock firmware, which exports no
-  `available`) does it fall back to free plus buffers plus cached. That sum
+  `available`) or with an older exporter does it fall back to free plus
+  buffers plus cached. Its summary says "memory low" and the value, since
+  on that branch the value is an estimate, not what is available. That sum
   counts files in tmpfs as cached, so on odi-oss, where `/var` and `/tmp`
   are tmpfs, it stays well above `MemAvailable` as they fill. The Memory
   panel draws the new series. The parse moved to `src/meminfo.h`, tested on

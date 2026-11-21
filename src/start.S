@@ -9,7 +9,7 @@
  * reserve it) and an exit syscall on the way out, since returning from _start
  * would fall off the end of .text.
  *
- * The runtime support of -fstack-protector-strong (Makefile, HARDEN_CFLAGS)
+ * The runtime support of -fstack-protector-strong (CFLAGS in the Makefile)
  * lives here too, in assembly, because it is the code that must not be
  * protected itself: ssp_seed runs before the guard holds its value, and
  * __stack_chk_fail runs on a frame already known to be overwritten. The

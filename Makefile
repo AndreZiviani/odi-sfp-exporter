@@ -46,7 +46,31 @@ STRIP   := $(CROSS)strip
 # -ffreestanding   no libc, and no turning our loops back into libc calls
 CFLAGS  := -std=c99 -Os -Wall -Wextra \
            -march=mips1 -mabi=32 -EB -msoft-float -G0 \
-           -fno-pic -mno-abicalls -ffreestanding -fno-builtin -fno-stack-protector
+           -fno-pic -mno-abicalls -ffreestanding -fno-builtin
+
+# The hardening odi-oss builds its own tools with (src/harden.mk there):
+# -fstack-protector-strong       a guard word below the saved registers of
+#                                every function with a local array or a local
+#                                whose address is taken, checked on return.
+#                                The guard and the failure path are ours, in
+#                                src/start.S: no libc provides them.
+# -fstack-clash-protection       probes every page of a frame larger than one
+#                                page, so no frame can step over the guard gap
+#                                below the stack.
+# -ftrivial-auto-var-init=zero   locals start at zero, never at what the last
+#                                call left on the stack.
+# -fno-strict-overflow           signed and pointer overflow wrap, so a bounds
+#                                check written as an overflow test is never
+#                                optimised away.
+# -Wvla                          a variable-length array is an attacker-sized
+#                                stack allocation; there are none, keep it so.
+# -z noexecstack                 PT_GNU_STACK without the execute bit.
+# scripts/check-hardening.sh checks the result before the strip. A binary
+# that fails it is deleted (.DELETE_ON_ERROR below), so the next make links
+# and checks it again instead of taking the unchecked file as up to date.
+CFLAGS  += -fstack-protector-strong -fstack-clash-protection \
+           -ftrivial-auto-var-init=zero -fno-strict-overflow -Wvla \
+           -fno-tree-loop-distribute-patterns
 
 # Passed in from the host target; the header defaults it if absent so a bare
 # in-container build still compiles.
@@ -55,7 +79,8 @@ ifneq ($(BUILD_ID),)
 CFLAGS  += -DBUILD_ID='"$(BUILD_ID)"'
 endif
 
-LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none
+LDFLAGS := -nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none \
+           -Wl,-z,noexecstack
 
 HDRS := $(wildcard src/*.h)
 
@@ -73,6 +98,7 @@ HDRS := $(wildcard src/*.h)
 # Park the value in a file and depend on the file. FORCE makes the recipe run
 # every time; `cmp` means the file is only rewritten, and the mtime only moves,
 # when the value actually differs.
+.DELETE_ON_ERROR:
 .PHONY: FORCE
 $(BUILD)/.build-id: FORCE | $(BUILD)
 	@printf '%s' '$(BUILD_ID)' | cmp -s - $@ 2>/dev/null || printf '%s' '$(BUILD_ID)' > $@
@@ -80,15 +106,17 @@ $(BUILD)/.build-id: FORCE | $(BUILD)
 # src itself as well: a header deleted from it is no longer in HDRS, and
 # without the directory's mtime nothing would be newer than the binary, so
 # the include that still names it would not fail until the next clean build.
-$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id | $(BUILD)
+$(BUILD)/metricsd: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id scripts/check-hardening.sh Makefile | $(BUILD)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter %.S %.c,$^)
+	sh scripts/check-hardening.sh $(CROSS) $@
 	$(STRIP) $@
 
 # The same program with mono_ms() answering that the kernel has no clock,
 # for the deadlines that are then a budget of waits (make omcicli-test).
 # Never shipped.
-$(BUILD)/metricsd-noclock: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id | $(BUILD)
+$(BUILD)/metricsd-noclock: src/start.S src/metricsd.c $(HDRS) src $(BUILD)/.build-id scripts/check-hardening.sh Makefile | $(BUILD)
 	$(CC) $(CFLAGS) -DMETRICSD_TEST_NO_CLOCK $(LDFLAGS) -o $@ $(filter %.S %.c,$^)
+	sh scripts/check-hardening.sh $(CROSS) $@
 	$(STRIP) $@
 
 $(BUILD):

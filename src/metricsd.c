@@ -21,6 +21,22 @@
 
 #include "metrics_body.h"
 
+/*
+ * -ftrivial-auto-var-init=zero (Makefile) clears a large local with a call
+ * to memset, whatever -ffreestanding and -fno-builtin say, so it has to
+ * exist. Built with -fno-tree-loop-distribute-patterns, without which gcc
+ * recognises this loop as a memset and calls itself.
+ */
+void *memset(void *dst, int c, unsigned long n);
+void *memset(void *dst, int c, unsigned long n)
+{
+	unsigned char *d = dst;
+
+	while (n--)
+		*d++ = (unsigned char)c;
+	return dst;
+}
+
 #define DEFAULT_PORT 9100
 #define BACKLOG      8
 

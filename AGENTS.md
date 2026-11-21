@@ -127,7 +127,10 @@ every tag describe as `unknown`; CI always fetches full history.
   rest of the SPECIAL2 class), `teq`/`tne`/`tge`/`tlt`, and `beql`/`bnel`
   are confirmed illegal and raise SIGILL. Every build uses `-march=mips1
   -mabi=32 -EB -msoft-float -G0 -fno-pic -mno-abicalls -ffreestanding
-  -fno-builtin -fno-stack-protector`. Do not raise `-march`, add FPU code,
+  -fno-builtin`, plus the hardening flags of the Makefile (the stack
+  protector, whose guard and failure path are in `src/start.S`, and the
+  rest of odi-oss `src/harden.mk`), checked by `scripts/check-hardening.sh`
+  before the strip. Do not raise `-march`, add FPU code,
   or assume a generic MIPS32/MIPS-II toolchain default is safe here --
   `mul` and `clz` are the two most common ways a normal C compile silently
   becomes unrunnable on this hardware.

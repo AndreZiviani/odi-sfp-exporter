@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Build: metricsd is built with the hardening odi-oss gives its own tools:
+  `-fstack-protector-strong` with a guard seeded per process from the
+  kernel's random bytes (`AT_RANDOM`), stack clash probes, zero-initialised
+  locals, wrapping signed overflow, `-Wvla`, and a stack marked
+  non-executable in the ELF (the RLX5281 has no execute-inhibit bit, so
+  that marking is not enforced). A return through an overwritten guard now
+  ends metricsd with SIGABRT (or a plain exit if SIGABRT is blocked) and a
+  line on stderr and, where `/dev/kmsg` opens, in the kernel log, instead
+  of returning into overwritten data. `scripts/check-hardening.sh` checks
+  every build before the strip, and a binary that fails it is deleted. The
+  binary grows by 3.3 KB (66,932 to 70,260 bytes) and uses no instruction
+  mnemonic it did not use before (odi-oss#482).
+
 ## v1.11.1 (2026-11-20)
 
 - Build: `make httpd` rebuilds `build/metricsd` after an edit to any

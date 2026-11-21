@@ -119,7 +119,7 @@ httpd: image
 
 # src/wrap.h (the octet-counter wraparound logic), src/resetinfo.h (the
 # /proc/odi_ramlog_prev parse), src/confighash.h (the md5sum parse and stat
-# comparison behind gpon_config_info), src/slot_state.h, src/host_link.h, src/respawn_state.h, src/cpu_stat.h, src/provision.h, src/transceiver.h, src/srvflow.h and
+# comparison behind gpon_config_info), src/slot_state.h, src/host_link.h, src/respawn_state.h, src/cpu_stat.h, src/provision.h, src/transceiver.h, src/srvflow.h, src/meminfo.h and
 # the mib_* tables in src/metrics_body.h have no MIPS-specific code, so they
 # are tested with the HOST compiler -- no Docker, no qemu-user. The
 # test_*.c files are real unit tests; test_metrics.sh is a fixture check on
@@ -130,7 +130,7 @@ httpd: image
 # write into it fails with EACCES on Linux runners -- the same trap that bit
 # `sums` once already.
 test:
-	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat test_image_info test_olt_info test_srvflow; do \
+	@for u in test_wrap test_resetinfo test_confighash test_slot_state test_host_link test_respawn_state test_provision test_gpon_link test_gpon_flow test_transceiver test_soc_temp test_cpu_stat test_image_info test_olt_info test_srvflow test_meminfo; do \
 		t=$$(mktemp); \
 		$(CC) -std=c99 -Wall -Wextra -o "$$t" test/$$u.c; rc=$$?; \
 		if [ $$rc -eq 0 ]; then "$$t"; rc=$$?; fi; \

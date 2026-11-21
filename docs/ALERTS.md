@@ -111,7 +111,7 @@ long before it crosses an absolute limit.
 | `OdiWatchdogReset` | warning | the previous boot ended in `wdt_*`, `panic` or `oops` (`gpon_last_reset_reason`), for the first hour after the boot |
 | `OdiResetLoop` | critical | `gpon_boot_count` rose 3 or more times within an hour (a drop to 1 after a power cycle is not counted) |
 | `OdiRebooted` | info | uptime under 10 min: any reboot, asked for or not |
-| `OdiMemoryLow` | warning | free + buffers + cached under 4 MiB for 10 min |
+| `OdiMemoryLow` | warning | `MemAvailable` under 4 MiB for 10 min; where it is not exported, free + buffers + cached |
 | `OdiUncommittedImage` | warning | `gpon_uncommitted` is 1 for 30 min: a trial boot nobody committed, so the next reset boots the other slot |
 | `OdiSafeModeBoot` | critical | `gpon_safe_mode` is 1 for 1 min: a safe-mode boot, the PON off and the default password in force for that boot |
 | `OdiSafeModeUnacknowledged` | warning | a safe-mode record waits for 30 min after a normal boot: it may have cleared `HOST_AUTONEG` |
@@ -128,9 +128,13 @@ is not counted either, only the reboots after it. A reboot that happens
 between two scrapes counts once even if the count rose by more.
 
 `OdiMemoryLow` is a margin above the odi-oss kernel watchdog memory floor,
-which resets the stick when `MemAvailable` stays under 2048 KB.
-`MemAvailable` is not exported; free + buffers + cached is the closest upper
-bound.
+which resets the stick when `MemAvailable` stays under 2048 KB. The rule
+reads `gpon_memory_bytes{kind="available"}` per instance, low or not, and
+only an instance without that series (the stock firmware, whose kernel has
+no `MemAvailable`, or an older exporter) falls back to free + buffers +
+cached. That sum is an estimate: files in tmpfs count as cached, so on
+odi-oss, where `/var` and `/tmp` are tmpfs, it stays above `MemAvailable`
+as they fill.
 
 `OdiUncommittedImage` is a reminder, not a fault: odi-oss never commits a
 trial by itself, so a trial that has been checked and is meant to stay is

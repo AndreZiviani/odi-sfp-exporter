@@ -20,6 +20,7 @@
 #include "confighash.h"
 #include "slot_state.h"
 #include "soc_temp.h"
+#include "meminfo.h"
 #include "host_link.h"
 #include "respawn_state.h"
 #include "cpu_stat.h"
@@ -222,59 +223,18 @@ static unsigned long line_key(const char *buf, unsigned long i, const char *key)
 	return key[k] ? 0 : i + k;
 }
 
-/*
- * /proc/meminfo on a device with ~64 MB is the metric most likely to explain a
- * reboot, and it costs no fork. Values are in kB; multiplying to bytes keeps
- * Prometheus base units and stays in integer arithmetic.
- */
+/* gpon_memory_bytes; the parse and the rendering are src/meminfo.h. */
 static void metric_meminfo(int fd)
 {
-	static const char *const keys[] = {
-		"MemTotal:", "MemFree:", "Buffers:", "Cached:", 0
-	};
-	static const char *const names[] = {
-		"total", "free", "buffers", "cached", 0
-	};
 	char buf[2048];
-	unsigned long i;
-	int k, have_header = 0;
+	char out[640];
+	unsigned long n;
 
 	if (read_file("/proc/meminfo", buf, sizeof(buf)) <= 0)
 		return;
-
-	for (k = 0; keys[k]; k++) {
-		for (i = 0; buf[i]; i++) {
-			unsigned long v, start, val = 0;
-
-			if (i && buf[i - 1] != '\n')
-				continue;
-			v = line_key(buf, i, keys[k]);
-			if (!v)
-				continue;
-
-			while (buf[v] == ' ')
-				v++;
-			start = v;
-			while (buf[v] >= '0' && buf[v] <= '9') {
-				val = val * 10 + (unsigned long)(buf[v] - '0');
-				v++;
-			}
-			if (v == start)
-				break;
-
-			if (!have_header) {
-				emit_header(fd, "gpon_memory_bytes",
-					    "Kernel memory, from /proc/meminfo.", "gauge");
-				have_header = 1;
-			}
-			put_fd(fd, "gpon_memory_bytes{kind=\"");
-			put_fd(fd, names[k]);
-			put_fd(fd, "\"} ");
-			put_u32_fd(fd, val * 1024);
-			put_fd(fd, "\n");
-			break;
-		}
-	}
+	n = meminfo_render(buf, out, sizeof(out));
+	if (n)
+		write_all(fd, out, n);
 }
 
 /*

@@ -386,8 +386,44 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, job: odi, instance: s1}
             exp_annotations:
-              summary: "s1: 2.5MiB reclaimable"
-              description: "Free plus buffers plus cached memory has been under 4 MiB for 10 minutes. The kernel watchdog resets the stick at 2 MiB available."
+              summary: "s1: 2.5MiB available"
+              description: "Available memory (MemAvailable, or free plus buffers plus cached where the kernel has no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
+
+  # MemAvailable exported: it decides, not the larger free + buffers +
+  # cached. Low available fires although the sum is 8 MiB.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="free"}'
+        values: '4194304x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="buffers"}'
+        values: '1048576x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="cached"}'
+        values: '3145728x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="available"}'
+        values: '3145728x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OdiMemoryLow
+        exp_alerts:
+          - exp_labels: {severity: warning, job: odi, instance: s1}
+            exp_annotations:
+              summary: "s1: 3MiB available"
+              description: "Available memory (MemAvailable, or free plus buffers plus cached where the kernel has no MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB available."
+
+  # And the other way: a sum under 4 MiB does not fire while MemAvailable,
+  # which counts reclaimable slab too, is above it.
+  - interval: 1m
+    input_series:
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="free"}'
+        values: '1048576x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="buffers"}'
+        values: '524288x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="cached"}'
+        values: '1048576x30'
+      - series: 'gpon_memory_bytes{job="odi",instance="s1",kind="available"}'
+        values: '6291456x30'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: OdiMemoryLow, exp_alerts: []}
 
   # lastgood.xml gets a new hash at 20m; lastgood_hs.xml disappears at 40m.
   - interval: 1m

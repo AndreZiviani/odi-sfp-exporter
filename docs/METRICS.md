@@ -145,7 +145,7 @@ From `/proc`, which costs no fork at all:
 | `gpon_soc_temperature_celsius` | `/sys/class/hwmon/hwmonN/temp1_input`, the hwmon device named `rtl9602c_soc` (odi-oss kernels that have it; nothing on the stock firmware or an older image) — the SoC die temperature, see below |
 | `gpon_soc_temperature_max_celsius`, `gpon_soc_temperature_crit_celsius` | `temp1_max` and `temp1_crit` in the same hwmon directory (odi-oss defaults 95 and 110 C, on the same unverified scale); absent on an image without them |
 | `gpon_soc_temperature_alarm{level="max\|crit"}` | `temp1_max_alarm` and `temp1_crit_alarm` in the same directory, 0 or 1; each series only when its file exists and parses |
-| `gpon_memory_bytes{kind="total\|free\|buffers\|cached"}` | `/proc/meminfo` |
+| `gpon_memory_bytes{kind="total\|free\|available\|buffers\|cached"}` | `/proc/meminfo`; `available` is `MemAvailable`, the value the odi-oss watchdog resets on (under 2 MB), and is absent on a kernel without that line (the stock firmware) |
 | `gpon_network_{receive,transmit}_{bytes,packets,errs,drop}_total{device="..."}` | `/proc/net/dev` |
 
 **The SoC die temperature is not calibrated.** `gpon_soc_temperature_celsius`

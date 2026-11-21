@@ -2833,7 +2833,7 @@
         "spec": {
           "id": 500,
           "title": "Memory",
-          "description": "gpon_memory_bytes by kind; used = total - free - cached - buffers",
+          "description": "gpon_memory_bytes by kind; used = total - free - cached - buffers; available is MemAvailable, what the odi-oss watchdog resets on (absent on the stock firmware)",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2882,6 +2882,29 @@
                       }
                     },
                     "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "gpon_memory_bytes{instance=~\"$instance\",kind=\"available\"}",
+                        "instant": false,
+                        "legendFormat": "{{instance}} available",
+                        "range": true
+                      },
+                      "labels": {
+                        "grafana.app/export-label": "prometheus-1",
+                        "grafana.app/export-datasource-name": "Mimir"
+                      }
+                    },
+                    "refId": "F",
                     "hidden": false
                   }
                 },

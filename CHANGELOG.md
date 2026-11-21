@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `gpon_memory_bytes{kind="available"}` is `MemAvailable` from
+  `/proc/meminfo`, the value the odi-oss watchdog resets the stick on when
+  it stays under 2 MB. OdiMemoryLow fires on it under 4 MiB; only on a
+  kernel without that line (the stock firmware, which exports no
+  `available`) does it fall back to free plus buffers plus cached. That sum
+  counts files in tmpfs as cached, so on odi-oss, where `/var` and `/tmp`
+  are tmpfs, it stays well above `MemAvailable` as they fill. The Memory
+  panel draws the new series. The parse moved to `src/meminfo.h`, tested on
+  the host with and without the `MemAvailable` line (`test/test_meminfo.c`)
+  (odi-oss#482).
+
 ## v1.11.1 (2026-11-20)
 
 - Build: `make httpd` rebuilds `build/metricsd` after an edit to any

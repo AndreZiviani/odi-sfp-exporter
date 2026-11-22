@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
       # default shallow checkout fetches no tags at all -- so the published
       # binary would report version="unknown" on the very tag that published
       # it.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -108,7 +108,7 @@ jobs:
         run: make sums
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: odi-sfp-exporter-${{ github.sha }}
           path: |
@@ -139,7 +139,7 @@ jobs:
 
       - name: Publish release (from CHANGELOG)
         if: startsWith(github.ref, 'refs/tags/v') && steps.changelog.outputs.found == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           draft: false
           generate_release_notes: false
@@ -151,7 +151,7 @@ jobs:
 
       - name: Publish release (fallback)
         if: startsWith(github.ref, 'refs/tags/v') && steps.changelog.outputs.found != 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           draft: false
           generate_release_notes: true

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Security: SECURITY.md sends reports to odi-oss private vulnerability reporting, the release workflow pins every action to a commit SHA, and Dependabot proposes action updates weekly (AndreZiviani/odi-oss#482).
 - Build: metricsd is built with the hardening odi-oss gives its own tools:
   `-fstack-protector-strong` with a guard seeded per process from the
   kernel's random bytes (`AT_RANDOM`), stack clash probes, zero-initialised

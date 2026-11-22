@@ -455,6 +455,9 @@ groups:
             Any reboot, including a power cycle and one asked for. Clears 10
             minutes after the boot.
 
+      # The summary names no source: the value is MemAvailable or, on the
+      # fallback branch, the estimate, and one rule cannot tell which
+      # without a label that would reset the pending state on a switch.
       # The kernel watchdog resets the stick when MemAvailable stays under
       # 2048 KB; 4 MiB leaves the margin. A stick whose kernel has no
       # MemAvailable (the stock firmware), or an exporter older than this
@@ -472,11 +475,11 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "{{ $labels.instance }}: {{ $value | humanize1024 }}B available"
+          summary: "{{ $labels.instance }}: memory low, {{ $value | humanize1024 }}B"
           description: >-
             Available memory (MemAvailable, or free plus buffers plus cached
-            where the kernel has no MemAvailable) has been under 4 MiB for 10
-            minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB
+            as an estimate where the kernel or an older exporter gives no
+            MemAvailable) has been under 4 MiB for 10 minutes. On odi-oss the kernel watchdog resets the stick at 2 MiB
             available.
 
       # A trial boot nobody committed. On odi-oss a trial is only ever
